@@ -30,24 +30,27 @@ npx skills add 2JIHAN/aside-automation-creator --list
 
 `skills` 설치와 자동화 실행은 별개입니다. 이 스킬을 설치해도 브라우저 작업이나 트리거가 자동 실행되지는 않습니다.
 
-### Aside 프로필에 설치
+### 모든 Aside 프로필에 한 번에 설치
 
-현재 `skills` CLI의 지원 에이전트 목록에는 Aside가 없습니다(2026-10-30). 따라서 위 명령만으로는 Aside에서 해당 스킬을 인식하지 못합니다.
+macOS 터미널에서 아래 한 줄을 실행합니다. Git이 필요하며, 먼저 Aside에서 프로필을 한 번 이상 생성해야 합니다.
 
 ```sh
-# aside account list에서 대상 계정을 확인한 뒤 지정합니다.
-ASIDE_ACCOUNT=u0
-SOURCE=$(mktemp -d)
-DEST="$HOME/.aside/$ASIDE_ACCOUNT/skills/user/aside-automation-creator"
-
-git clone https://github.com/2JIHAN/aside-automation-creator.git "$SOURCE/repo"
-test ! -e "$DEST" || { echo "기존 스킬이 있습니다: $DEST"; exit 1; }
-mkdir -p "$DEST"
-cp "$SOURCE/repo/SKILL.md" "$DEST/"
-cp -R "$SOURCE/repo/assets" "$DEST/"
+curl -fsSL https://raw.githubusercontent.com/2JIHAN/aside-automation-creator/main/install-to-aside.sh | /bin/bash
 ```
 
-기존 스킬을 업데이트할 때는 먼저 변경 내용을 비교하세요. Aside에서 파일을 생성하거나 복사했다면 사용 중인 격리 속성 처리 지침에 따라 해당 파일만 정리한 뒤 사용합니다.
+현재 skills CLI는 Aside를 직접 지원하지 않으므로, 이 스크립트가 Aside의 계정별 스킬 폴더에 설치합니다.
+
+- 공용 소스가 없으면 ~/.local/share/aside-automation-creator에 clone합니다.
+- 이미 있으면 git pull --ff-only로 최신 main을 가져옵니다. 로컬 변경이 있거나 다른 저장소이면 중단합니다.
+- 모든 기존 ~/.aside/u/<계정 번호>/skills/user/aside-automation-creator에 SKILL.md와 assets를 설치합니다. 로그인하지 않은 로컬 프로필도 포함합니다.
+- 기존 스킬은 ~/.aside/skill-backups/aside-automation-creator/에 백업합니다. 동일한 내용이면 건드리지 않습니다.
+- 새로 생성하거나 복사한 파일의 격리 속성을 제거하고 확인합니다. 다른 자동화나 예약 설정은 변경하지 않습니다.
+
+같은 한 줄을 다시 실행하면 최신화와 새로 생긴 프로필의 설치를 함께 수행합니다. 실행 중인 채팅이 이미 읽은 지침은 바뀌지 않을 수 있으므로 설치 후 새 채팅을 여세요. 다른 Mac이나 원격 호스트의 프로필은 별도로 설치해야 합니다.
+
+원격 스크립트를 바로 실행하기 전에 검토하려면 저장소의 [install-to-aside.sh](install-to-aside.sh)를 확인하세요. 로컬 clone에서도 /bin/bash install-to-aside.sh로 실행할 수 있습니다.
+
+필요한 경우 ASIDE_HOME으로 Aside 데이터 루트를, ASIDE_AUTOMATION_CREATOR_REPO로 공용 소스 경로를 지정할 수 있습니다.
 
 ## 사용 예시
 
@@ -109,10 +112,10 @@ aside-automation-creator로 이 업무를 함께 따라가면서 자동화 만�
 브라우저나 실제 트리거를 실행하지 않고 가짜 CLI와 임시 HOME으로 검사합니다.
 
 ```sh
-node --test assets/template/tests/scenario.test.mjs
+node --test assets/template/tests/scenario.test.mjs tests/install-to-aside.test.mjs
 ```
 
-정상, 복구, 문제 인계, 재확인 한도, 알림과 정리 실패, 계정 확인, 설치와 재설치 및 제거, 기존 서비스 소유권 충돌을 검사합니다.
+정상, 복구, 문제 인계, 재확인 한도, 알림과 정리 실패, 계정 확인, 설치와 재설치 및 제거, 기존 서비스 소유권 충돌을 검사합니다. Aside 전체 계정 설치는 가짜 Git과 임시 계정 폴더에서 백업, 최신화와 반복 실행을 검사합니다.
 
 ## 관련 문서
 
