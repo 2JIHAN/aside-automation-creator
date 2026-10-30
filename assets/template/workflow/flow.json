@@ -1,0 +1,99 @@
+{
+  "contextFile": "workflow/context.md",
+  "startStep": "work",
+  "initialState": {
+    "업무상태": "미확인",
+    "알림상태": "미확인",
+    "현재턴결과": "미확인"
+  },
+  "steps": {
+    "work": {
+      "stateKey": "업무상태",
+      "instructionFile": "workflow/steps/work.md",
+      "next": [
+        {
+          "when": {
+            "업무상태": "정상"
+          },
+          "step": "notify"
+        },
+        {
+          "when": {
+            "업무상태": "예외발생"
+          },
+          "step": "review"
+        }
+      ]
+    },
+    "review": {
+      "instructionFile": "workflow/steps/review.md",
+      "rememberCaller": true,
+      "next": [
+        {
+          "when": {
+            "현재턴결과": "재확인"
+          },
+          "step": "$caller"
+        },
+        {
+          "when": {
+            "현재턴결과": "해결불가"
+          },
+          "step": "notify"
+        }
+      ]
+    },
+    "notify": {
+      "stateKey": "알림상태",
+      "instructionFile": "workflow/steps/notify.md",
+      "next": [
+        {
+          "when": {
+            "알림상태": "알림완료"
+          },
+          "step": "close-tabs"
+        },
+        {
+          "when": {
+            "알림상태": "알림불가"
+          },
+          "step": "close-tabs"
+        }
+      ]
+    },
+    "close-tabs": {
+      "instructionFile": "workflow/steps/close-tabs.md",
+      "next": [
+        {
+          "when": {
+            "업무상태": "정상",
+            "알림상태": "알림완료",
+            "현재턴결과": "정리완료"
+          },
+          "finishWithStatus": "ok"
+        },
+        {
+          "when": {
+            "업무상태": "예외발생",
+            "알림상태": "알림완료",
+            "현재턴결과": "정리완료"
+          },
+          "finishWithStatus": "handed_off"
+        },
+        {
+          "when": {
+            "알림상태": "알림불가",
+            "현재턴결과": "정리완료"
+          },
+          "finishWithStatus": "incomplete"
+        },
+        {
+          "when": {
+            "현재턴결과": "정리불가"
+          },
+          "finishWithStatus": "incomplete"
+        }
+      ]
+    }
+  }
+}
