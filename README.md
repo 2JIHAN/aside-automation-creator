@@ -2,7 +2,7 @@
 
 사용자와 실제 작업을 함께 따라가며 배운 절차를, 반복 실행할 수 있는 Aside 자동화 폴더로 만드는 Agent Skill입니다.
 
-요청을 처음부터 JSON으로 작성할 필요는 없습니다. 평소처럼 작업을 보여주고 목표와 예외 대응을 정하면, 에이전트가 단계 지침과 실행 흐름을 작성합니다. 기본 생성 위치는 `~/aside-automations/<slug>/`입니다.
+Aside에서 스킬을 인식할 수 있도록 설치한 후, 자동화 하려는 작업을 채팅세션에서 시켜보며 에이전트에게 맥락과 시나리오를 학습시킵니다. 평소처럼 작업을 보여주고 목표와 예외 대응을 정하면, 에이전트가 `aside-automation-creator` 스킬을 통해 단계 지침과 실행 흐름을 작성합니다. 자동화의 기본 생성 위치는 `~/aside-automations/<폴더명>/`입니다.
 
 ## 설치
 
@@ -28,11 +28,11 @@ npx skills add 2JIHAN/aside-automation-creator -g -a codex
 npx skills add 2JIHAN/aside-automation-creator --list
 ```
 
-`skills` 설치와 자동화 실행은 별개입니다. 이 스킬을 설치해도 브라우저 작업이나 트리거가 자동 실행되지 않습니다.
+`skills` 설치와 자동화 실행은 별개입니다. 이 스킬을 설치해도 브라우저 작업이나 트리거가 자동 실행되지는 않습니다.
 
 ### Aside 프로필에 설치
 
-현재 `skills` CLI의 지원 에이전트 목록에는 Aside가 없습니다. 위 명령이 Aside 프로필 경로에 설치한다고 가정하지 마세요. Aside에서는 저장소의 `SKILL.md`와 `assets/`를 선택한 계정의 커스텀 스킬 폴더에 복사합니다.
+현재 `skills` CLI의 지원 에이전트 목록에는 Aside가 없습니다(2026-10-30). 따라서 위 명령만으로는 Aside에서 해당 스킬을 인식하지 못합니다.
 
 ```sh
 # aside account list에서 대상 계정을 확인한 뒤 지정합니다.
