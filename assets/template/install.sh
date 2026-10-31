@@ -8,12 +8,13 @@ case "$MINUTE" in ''|*[!0-9]*) echo '실행 분은 0-59 정수여야 합니다.'
 LABEL=io.local.routines.__AUTOMATION_SLUG__
 case "$LABEL" in *'__AUTOMATION_'*) echo '템플릿 값을 먼저 확정하세요.' >&2; exit 2 ;; esac
 LAUNCHER="$HOME/background/__AUTOMATION_NAME__-매시${MINUTE}분"
-CONFIG=$(node - "$DIR" "$MINUTE" "$LABEL" "$LAUNCHER" <<'JS'
-const [dir, minute, label, launcher] = process.argv.slice(2);
+CONFIG=$(node - "$DIR" "$MINUTE" "$LABEL" "$LAUNCHER" "${ASIDE_AUTOMATION_CREATOR_REPO:-$HOME/.local/share/aside-automation-creator}" <<'JS'
+const [dir, minute, label, launcher, engineRepo] = process.argv.slice(2);
 console.log(JSON.stringify({
   Label: label,
   ProgramArguments: [launcher],
   WorkingDirectory: dir,
+  EnvironmentVariables: { ASIDE_AUTOMATION_CREATOR_REPO: require("path").resolve(engineRepo) },
   StartCalendarInterval: { Minute: Number(minute) },
   RunAtLoad: false,
   StandardOutPath: dir + '/runtime/runs/launchd.log',

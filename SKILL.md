@@ -21,12 +21,13 @@ description: "사용자가 실제 작업을 함께 따라가며 반복 업무를
 
 assets/template/의 필요한 파일을 복사한다. 기존 자동화의 특정 사이트, 업체와 계정 정보를 가져오지 않는다. 템플릿에는 정상, 검토, 알림, 정리 연결만 예시로 들어 있다. 사용자가 확인한 실제 업무로 교체한다.
 
-- src/engine.mjs는 가급적 그대로 재사용한다. 업무 규칙을 엔진에 넣지 않는다.
+- 공통 엔진은 ~/.local/share/aside-automation-creator/engine.mjs에 하나만 둔다. 시나리오에 엔진을 복사하지 않는다. 업무 규칙을 엔진에 넣지 않는다.
+- run.sh는 공통 엔진에 실행 계정과 시나리오 폴더의 절대경로를 전달한다. ASIDE_AUTOMATION_CREATOR_REPO로 공통 저장소 경로를 바꿀 수 있다.
 - workflow/flow.json은 단계, 선언된 상태와 이동 조건을 정한다.
 - workflow/context.md는 공통 대상, 권한, 예외 원칙, 탭과 증거 규칙을 둔다.
 - workflow/steps/*.md는 각 작업의 목적, 수행 방법, 판단 기준과 마지막 보고 형식을 둔다.
-- run.sh는 계정 확인 후 엔진만 실행한다.
-- install.sh와 uninstall.sh는 승인된 트리거 등록과 해제만 한다.
+- run.sh는 계정 확인 후 공통 엔진만 실행한다.
+- install.sh와 uninstall.sh는 승인된 트리거 등록과 해제만 한다. install.sh는 공통 저장소 경로를 LaunchAgent의 EnvironmentVariables에 저장한다.
 - tests/scenario.test.mjs는 가짜 CLI로 연결과 기록을 검사한다. 새 업무에 맞게 기대값을 수정한다.
 - runtime/runs/는 생성된 실행 기록과 증거다. 수정할 지침과 분리하고 Git에 넣지 않는다.
 
@@ -63,7 +64,7 @@ next는 평평한 배열이고 when에는 initialState에 선언된 변수만 �
 검증은 순서대로 한다.
 
 1. 자리표시자, 상태 선언, MD 경로, 모든 분기와 복귀 및 종료를 검사한다.
-2. 엔진은 node --check, 셸은 sh -n, 테스트는 node --test tests/scenario.test.mjs로 검사한다. 가짜 CLI와 임시 HOME을 사용해 정상, 예외 인계, 복구, 한도, 알림 실패, 정리 실패와 기술 오류를 검증한다.
+2. 공통 엔진은 node --check ~/.local/share/aside-automation-creator/engine.mjs, 셸은 sh -n, 테스트는 node --test tests/scenario.test.mjs로 검사한다. 가짜 CLI와 임시 HOME을 사용해 정상, 예외 인계, 복구, 한도, 알림 실패, 정리 실패와 기술 오류를 검증한다.
 3. 사용자가 실제 실행을 승인하면 run.sh로 한 번 실행하고 run.json과 실제 외부 효과를 확인한다. 모의 테스트 통과를 실전 성공으로 설명하지 않는다.
 4. 트리거 등록을 승인하면 설치하고 실제 등록 값, 다음 실행 조건, 해제 동작을 확인한다. 알림이나 테스트용 외부 전송을 임의로 하지 않는다.
 

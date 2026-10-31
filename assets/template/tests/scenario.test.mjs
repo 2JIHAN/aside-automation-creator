@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { execFileSync, spawnSync } from 'node:child_process';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
+const engine = path.join(process.env.ASIDE_AUTOMATION_CREATOR_REPO || path.join(os.homedir(), '.local/share/aside-automation-creator'), 'engine.mjs');
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'aside-creator-test-'));
 test.after(() => fs.rmSync(temp, { recursive: true, force: true }));
 const initial = { 업무상태: '미확인', 알림상태: '미확인', 현재턴결과: '미확인' };
@@ -22,13 +23,16 @@ function fixture(values) {
   const dir = fs.mkdtempSync(path.join(temp, 'case-'));
   const routine = path.join(dir, 'routine');
   fs.mkdirSync(routine);
-  for (const name of ['src', 'workflow', 'run.sh', 'install.sh', 'uninstall.sh']) fs.cpSync(path.join(root, name), path.join(routine, name), { recursive: true });
+  for (const name of ['workflow', 'run.sh', 'install.sh', 'uninstall.sh']) fs.cpSync(path.join(root, name), path.join(routine, name), { recursive: true });
   for (const name of ['run.sh', 'install.sh', 'uninstall.sh']) {
     const file = path.join(routine, name);
     const text = fs.readFileSync(file, 'utf8').replaceAll('__TIMEZONE__', 'Asia/Seoul').replaceAll('__ACCOUNT_EMAIL__', 'test@example.invalid').replaceAll('__AUTOMATION_SLUG__', 'template-test').replaceAll('__AUTOMATION_NAME__', '테스트자동화');
     fs.writeFileSync(file, text);
   }
   const home = path.join(dir, 'home');
+  const engineRepo = path.join(home, '.local/share/aside-automation-creator');
+  fs.mkdirSync(engineRepo, { recursive: true });
+  fs.copyFileSync(engine, path.join(engineRepo, 'engine.mjs'));
   const bin = path.join(home, '.local/bin');
   fs.mkdirSync(bin, { recursive: true });
   const calls = path.join(dir, 'calls.jsonl');
@@ -51,11 +55,11 @@ const fs=require('fs');const a=process.argv.slice(2);fs.appendFileSync(process.e
 process.exit(a[0]==='print'&&!process.env.EXISTING?1:a[0]==='bootout'&&process.env.BOOTOUT_FAIL?5:0);
 `);
   if (process.platform === 'darwin' && process.env.ASIDE_CLEAR_QUARANTINE) execFileSync('/bin/bash', [process.env.ASIDE_CLEAR_QUARANTINE, dir]);
-  return { dir, routine, home, calls, launches, env: { ...process.env, HOME: home, PLAN: plan, CALLS: calls, LAUNCHES: launches } };
+  return { dir, routine, home, calls, launches, env: { ...process.env, HOME: home, ASIDE_AUTOMATION_CREATOR_REPO: engineRepo, PLAN: plan, CALLS: calls, LAUNCHES: launches } };
 }
 function records(file) { return fs.existsSync(file) ? fs.readFileSync(file, 'utf8').trim().split('\n').filter(Boolean).map(JSON.parse) : []; }
 function execute(f) {
-  const out = spawnSync(process.execPath, [path.join(f.routine, 'src/engine.mjs'), 'u7'], { env: f.env, encoding: 'utf8', timeout: 10000 });
+  const out = spawnSync(process.execPath, [path.join(f.env.ASIDE_AUTOMATION_CREATOR_REPO, 'engine.mjs'), 'u7', f.routine], { env: f.env, encoding: 'utf8', timeout: 10000 });
   const line = out.stdout.split('\n').find(s => s.startsWith('ENGINE_RESULT='));
   assert.ok(line, out.stderr);
   return { out, run: JSON.parse(line.slice('ENGINE_RESULT='.length)) };
@@ -123,7 +127,7 @@ test('모의 설치와 재설치 및 해제는 해당 서비스만 관리', { sk
   assert.ok(records(f.launches).some(a => a[0] === 'bootstrap'));assert.ok(!records(f.launches).some(a => a[0] === 'kickstart'));
   out = invoke('install.sh', ['18'], { ...f.env, EXISTING: '1' });assert.equal(out.status, 0, out.stderr);assert.ok(!fs.existsSync(launcher));
   out = invoke('uninstall.sh', [], { ...f.env, EXISTING: '1', BOOTOUT_FAIL: '1' });assert.equal(out.status, 5);assert.ok(fs.existsSync(plist));
-  out = invoke('uninstall.sh', [], { ...f.env, EXISTING: '1' });assert.equal(out.status, 0, out.stderr);assert.ok(!fs.existsSync(plist));assert.ok(fs.existsSync(path.join(f.routine, 'src/engine.mjs')));
+  out = invoke('uninstall.sh', [], { ...f.env, EXISTING: '1' });assert.equal(out.status, 0, out.stderr);assert.ok(!fs.existsSync(plist));assert.ok(fs.existsSync(path.join(f.env.ASIDE_AUTOMATION_CREATOR_REPO, 'engine.mjs')));
 });
 
 test('다른 서비스의 plist는 설치와 해제 모두 거부', { skip: process.platform !== 'darwin' }, () => {
@@ -149,4 +153,68 @@ test('계정 이메일 대소문자 차이는 같은 계정으로 처리', () =>
   fs.writeFileSync(file, fs.readFileSync(file, 'utf8').replace('test@example.invalid', 'TEST@EXAMPLE.INVALID'));
   const out = spawnSync('/bin/sh', [file], { env: f.env, encoding: 'utf8' });
   assert.equal(out.status, 0, out.stderr); assert.ok(records(f.calls).some(a => a[0] === 'exec'));
+});
+
+test('두 시나리오가 엔진 하나를 공유하고 각 폴더에만 기록', () => {
+  const f = fixture(['정상', '알림완료', '정리완료', '정상', '알림완료', '정리완료']);
+  const second = path.join(f.dir, 'second scenario');
+  fs.cpSync(f.routine, second, { recursive: true });
+  const sharedEngine = path.join(f.env.ASIDE_AUTOMATION_CREATOR_REPO, 'engine.mjs');
+  const engineBefore = fs.readFileSync(sharedEngine);
+  for (const routine of [f.routine, second]) {
+    assert.equal(fs.existsSync(path.join(routine, 'src/engine.mjs')), false);
+    const out = spawnSync('/bin/sh', [path.join(routine, 'run.sh')], { cwd: f.home, env: f.env, encoding: 'utf8' });
+    assert.equal(out.status, 0, out.stderr);
+    const run = JSON.parse(out.stdout.split('\n').find(line => line.startsWith('ENGINE_RESULT=')).slice('ENGINE_RESULT='.length));
+    assert.equal(run.finishStatus, 'ok');
+    assert.ok(run.runDir.startsWith(path.join(routine, 'runtime/runs') + path.sep));
+    const calls = records(f.calls).filter(args => args[0] === 'exec' || args[1] === 'resume').slice(-3);
+    assert.ok(calls[0].at(-1).includes(path.join(routine, 'workflow/context.md')));
+    assert.ok(calls.every(args => args.at(-1).includes(path.join(routine, 'workflow/steps'))));
+  }
+  assert.deepEqual(fs.readFileSync(sharedEngine), engineBefore);
+  assert.equal(fs.existsSync(path.join(f.env.ASIDE_AUTOMATION_CREATOR_REPO, 'runtime')), false);
+});
+
+test('공통 엔진이 없으면 다른 엔진으로 대체하지 않고 중단', () => {
+  const f = fixture([]);
+  fs.rmSync(path.join(f.env.ASIDE_AUTOMATION_CREATOR_REPO, 'engine.mjs'));
+  const out = spawnSync('/bin/sh', [path.join(f.routine, 'run.sh')], { env: f.env, encoding: 'utf8' });
+  assert.notEqual(out.status, 0);
+  assert.ok(!records(f.calls).some(args => args[0] === 'exec' || args[1] === 'resume'));
+  assert.equal(fs.existsSync(path.join(f.routine, 'runtime')), false);
+});
+
+test('시나리오 경로 없는 직접 호출은 실행 전에 거부', () => {
+  const f = fixture([]);
+  const out = spawnSync(process.execPath, [path.join(f.env.ASIDE_AUTOMATION_CREATOR_REPO, 'engine.mjs'), 'u7'], { env: f.env, encoding: 'utf8' });
+  assert.notEqual(out.status, 0);
+  assert.match(out.stderr, /scenario-folder/);
+  assert.equal(records(f.calls).length, 0);
+});
+
+test('경로 설정 없이 기본 설치 위치의 공통 엔진 사용', () => {
+  const f = fixture(['정상', '알림완료', '정리완료']);
+  const env = { ...f.env };
+  delete env.ASIDE_AUTOMATION_CREATOR_REPO;
+  const out = spawnSync('/bin/sh', [path.join(f.routine, 'run.sh')], { env, encoding: 'utf8' });
+  assert.equal(out.status, 0, out.stderr);
+  assert.ok(records(f.calls).some(args => args[0] === 'exec'));
+});
+
+test('예약 실행은 설치 시 지정한 공통 저장소 경로를 보존', { skip: process.platform !== 'darwin' }, () => {
+  const f = fixture(['정상', '알림완료', '정리완료']);
+  const custom = path.join(f.home, 'custom engine');
+  fs.renameSync(f.env.ASIDE_AUTOMATION_CREATOR_REPO, custom);
+  const out = spawnSync('/bin/sh', [path.join(f.routine, 'install.sh'), '17'], { env: { ...f.env, ASIDE_AUTOMATION_CREATOR_REPO: custom }, encoding: 'utf8' });
+  assert.equal(out.status, 0, out.stderr);
+  const plist = path.join(f.home, 'Library/LaunchAgents/io.local.routines.template-test.plist');
+  const config = JSON.parse(execFileSync('/usr/bin/plutil', ['-convert', 'json', '-o', '-', plist], { encoding: 'utf8' }));
+  assert.equal(config.EnvironmentVariables.ASIDE_AUTOMATION_CREATOR_REPO, custom);
+  const env = { ...f.env };
+  delete env.ASIDE_AUTOMATION_CREATOR_REPO;
+  Object.assign(env, config.EnvironmentVariables);
+  const run = spawnSync('/bin/sh', [config.ProgramArguments[0]], { cwd: config.WorkingDirectory, env, encoding: 'utf8' });
+  assert.equal(run.status, 0, run.stderr);
+  assert.ok(records(f.calls).some(args => args[0] === 'exec'));
 });

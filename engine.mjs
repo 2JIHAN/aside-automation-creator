@@ -1,14 +1,16 @@
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import { stripVTControlCharacters } from "node:util";
 
 const MAX_RECHECKS_PER_STEP = 2;
 
 function main() {
-  const root = fileURLToPath(new URL("../", import.meta.url));
+  if (process.argv.length !== 4) {
+    throw Error("사용법: node engine.mjs <account> <scenario-folder>");
+  }
+  const root = path.resolve(process.argv[3]);
   const cli = path.join(os.homedir(), ".local/bin/aside");
   const account = process.argv[2];
   const flow = JSON.parse(

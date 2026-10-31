@@ -16,4 +16,5 @@ ACCOUNT=$(printf '%s\n' "$ACCOUNTS" | awk -v email='__ACCOUNT_EMAIL__' '
     print id
   }
 ')
-"$NODE" "$DIR/src/engine.mjs" "$ACCOUNT"
+ENGINE_REPO=${ASIDE_AUTOMATION_CREATOR_REPO:-"$HOME/.local/share/aside-automation-creator"}
+"$NODE" "$ENGINE_REPO/engine.mjs" "$ACCOUNT" "$DIR"

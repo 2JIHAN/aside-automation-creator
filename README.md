@@ -49,12 +49,24 @@ aside-automation-creator로 이 업무를 같이 따라가면서 자동화 만�
 
 ## 생성되는 파일
 
+공통 엔진은 `~/.local/share/aside-automation-creator/engine.mjs`에 설치됩니다. 각 자동화의 `run.sh`가 실행 계정과 자기 폴더 경로를 전달하며, 엔진은 해당 폴더에서 지침을 읽고 기록을 남깁니다. 자동화 폴더에는 엔진 복사본을 두지 않습니다.
+
 각 자동화 폴더에는 아래 파일들이 만들어집니다.
 
-- `src/engine.mjs`: 같은 세션에서 단계를 실행하고 기록합니다.
+- `run.sh`: 설치된 공통 엔진을 호출합니다.
 - `workflow/flow.json`: 상태와 다음 단계의 연결을 정합니다.
 - `workflow/context.md`, `workflow/steps/*.md`: 공통 원칙과 각 작업의 지침입니다.
-- `run.sh`, `install.sh`, `uninstall.sh`: 실행과 트리거 등록 및 해제를 담당합니다.
+- `install.sh`, `uninstall.sh`: 트리거 등록과 해제를 담당합니다.
 - `tests/`, `runtime/runs/`: 모의 테스트와 실제 실행 기록 및 증거를 분리합니다.
 
 제공된 시간 트리거는 macOS에서 매시 지정 분에 실행하는 예시입니다. 다른 실행 조건은 작업에 맞게 확인하고 구성합니다. 스킬을 설치하는 것만으로 자동화나 예약 실행이 시작되지는 않습니다.
+
+## 공통 엔진 개발과 검증
+
+저장소에서 다음 명령으로 브라우저 조작 없이 모의 테스트를 실행합니다.
+
+```sh
+ASIDE_AUTOMATION_CREATOR_REPO="$PWD" node --test assets/template/tests/scenario.test.mjs tests/install-to-aside.test.mjs
+```
+
+공통 저장소를 다른 위치에 설치했다면 실행과 테스트에 `ASIDE_AUTOMATION_CREATOR_REPO`를 같은 경로로 설정하세요. 모든 시나리오가 같은 엔진을 사용하므로 저장소 업데이트는 해당 엔진을 쓰는 자동화 전체에 적용됩니다. 기존 엔진을 보유한 자동화는 자동으로 변경되지 않습니다.

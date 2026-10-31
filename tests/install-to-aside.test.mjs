@@ -36,6 +36,7 @@ function fixture(t) {
   const triggers = join(root, 'runtime.log');
   for (const n of [0, 1, 2]) mkdirSync(join(aside, 'u', String(n)), { recursive: true });
   put(join(source, 'SKILL.md'), payload);
+  put(join(source, 'engine.mjs'), '// shared engine fixture\n');
   put(join(source, 'assets', 'template', 'marker.txt'), 'template marker\n');
   put(join(source, 'README.md'), 'must not be installed\n');
   put(join(source, 'install-to-aside.sh'), 'must not be installed\n');
@@ -212,4 +213,14 @@ test('Darwin clears quarantine from copied readonly payload while preserving mod
     assert.equal(preserved.status, 0, preserved.stderr);
     assert.equal(preserved.stdout.trim(), 'keep');
   }
+});
+
+test('missing shared engine refuses before installing any profile', t => {
+  const f = fixture(t);
+  rmSync(join(f.source, 'engine.mjs'));
+  const before = tree(join(f.aside, 'u'));
+  const result = f.run();
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /공통 엔진이 없습니다/);
+  assert.deepEqual(tree(join(f.aside, 'u')), before);
 });

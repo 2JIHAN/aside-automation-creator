@@ -77,6 +77,7 @@ main() {
   local file
   find "$REPO" -newer "$WORKDIR/start" -print0 | while IFS= read -r -d '' file; do clear_one "$file"; done
   [ -f "$REPO/SKILL.md" ] && [ ! -L "$REPO/SKILL.md" ] && [ -d "$REPO/assets" ] || fail '스킬 파일과 assets가 없습니다.'
+  [ -f "$REPO/engine.mjs" ] && [ ! -L "$REPO/engine.mjs" ] || fail '공통 엔진이 없습니다.'
   [ -z "$(find "$REPO/assets" -type l -print -quit)" ] || fail '템플릿의 심볼릭 링크는 설치하지 않습니다.'
   grep -Fxq 'name: "aside-automation-creator"' "$REPO/SKILL.md" || fail '스킬 이름이 다릅니다.'
 
