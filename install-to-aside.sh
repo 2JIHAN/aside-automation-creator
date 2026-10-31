@@ -37,6 +37,14 @@ clear_tree() {
   find "$1" -print0 | while IFS= read -r -d '' file; do clear_one "$file"; done
 }
 
+check_source() {
+  local source="$1"
+  [ -f "$source/SKILL.md" ] && [ ! -L "$source/SKILL.md" ] && [ -d "$source/assets" ] || fail '스킬 파일과 assets가 없습니다.'
+  [ -f "$source/engine.mjs" ] && [ ! -L "$source/engine.mjs" ] || fail '공통 엔진이 없습니다.'
+  [ -z "$(find "$source/assets" -type l -print -quit)" ] || fail '템플릿의 심볼릭 링크는 설치하지 않습니다.'
+  grep -Fxq 'name: "aside-automation-creator"' "$source/SKILL.md" || fail '스킬 이름이 다릅니다.'
+}
+
 main() {
   [ "$#" -eq 0 ] || fail '인수 없이 실행하세요.'
   command -v git >/dev/null || fail 'Git이 필요합니다.'
@@ -68,18 +76,29 @@ main() {
     [ -d "$REPO/.git" ] || fail "다른 폴더를 덮어쓰지 않습니다: $REPO"
     [ "$(git -C "$REPO" remote get-url origin)" = "$URL" ] || fail '원본 저장소 주소가 다릅니다.'
     [ "$(git -C "$REPO" symbolic-ref --short HEAD)" = main ] || fail 'main 브랜치가 아닙니다.'
-    [ -z "$(git -C "$REPO" status --porcelain)" ] || fail '공용 저장소에 로컬 변경이 있습니다. 먼저 보존하거나 커밋하세요.'
-    git -C "$REPO" pull --ff-only
+    if [ -n "$(git -C "$REPO" status --porcelain)" ]; then
+      local fresh="$WORKDIR/repository" repo_backup="$REPO.backup-$(date +%Y%m%d-%H%M%S)-$$"
+      [ ! -e "$repo_backup" ] && [ ! -L "$repo_backup" ] || fail "백업 경로가 이미 있습니다: $repo_backup"
+      git clone --branch main --single-branch "$URL" "$fresh"
+      clear_tree "$fresh"
+      check_source "$fresh"
+      mv "$REPO" "$repo_backup"
+      if ! mv "$fresh" "$REPO"; then
+        [ ! -e "$REPO" ] && [ ! -L "$REPO" ] || fail "새 저장소 배치 실패. 원본 백업: $repo_backup"
+        mv "$repo_backup" "$REPO"
+        fail '새 저장소를 배치하지 못해 기존 저장소를 복원했습니다.'
+      fi
+      printf '로컬 수정 저장소 백업: %s\n' "$repo_backup"
+    else
+      git -C "$REPO" pull --ff-only
+    fi
   else
     git clone --branch main --single-branch "$URL" "$REPO"
   fi
   # 이번 Git 작업이 생성하거나 수정한 항목만 정리한다.
   local file
   find "$REPO" -newer "$WORKDIR/start" -print0 | while IFS= read -r -d '' file; do clear_one "$file"; done
-  [ -f "$REPO/SKILL.md" ] && [ ! -L "$REPO/SKILL.md" ] && [ -d "$REPO/assets" ] || fail '스킬 파일과 assets가 없습니다.'
-  [ -f "$REPO/engine.mjs" ] && [ ! -L "$REPO/engine.mjs" ] || fail '공통 엔진이 없습니다.'
-  [ -z "$(find "$REPO/assets" -type l -print -quit)" ] || fail '템플릿의 심볼릭 링크는 설치하지 않습니다.'
-  grep -Fxq 'name: "aside-automation-creator"' "$REPO/SKILL.md" || fail '스킬 이름이 다릅니다.'
+  check_source "$REPO"
 
   local stage="$WORKDIR/skill" dest prepared backup='' installed=0 unchanged=0
   mkdir "$stage"

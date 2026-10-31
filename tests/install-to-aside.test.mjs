@@ -46,8 +46,12 @@ set -eu
 printf '%s\\n' "$*" >> "$FAKE_GIT_LOG"
 if [ "$1" = clone ]; then
   [ "$#" = 6 ] && [ "$2" = --branch ] && [ "$3" = main ] && [ "$4" = --single-branch ] && [ "$5" = '${url}' ] || exit 90
-  [ "$6" = "$ASIDE_AUTOMATION_CREATOR_REPO" ] || exit 91
+  case "$6" in
+    "$ASIDE_AUTOMATION_CREATOR_REPO"|"$ASIDE_HOME"/.automation-creator-install.*/repository) ;;
+    *) exit 91 ;;
+  esac
   mkdir -p "$6"
+  if [ -n "\${FAKE_CLONE_FAIL:-}" ]; then echo partial > "$6/partial"; exit 95; fi
   cp -R "$FAKE_SOURCE/." "$6/"
   mkdir "$6/.git"
   exit 0
@@ -135,7 +139,6 @@ test('existing skill is backed up outside skill trees; rerun pulls and preserves
 for (const [name, prepare, env, message] of [
   ['unknown source path', f => mkdirSync(f.repo), {}, /다른 폴더/],
   ['wrong remote', f => mkdirSync(join(f.repo, '.git'), { recursive: true }), { FAKE_REMOTE: 'https://invalid.example/repo' }, /주소가 다릅니다/],
-  ['dirty source', f => mkdirSync(join(f.repo, '.git'), { recursive: true }), { FAKE_DIRTY: ' M SKILL.md\n' }, /로컬 변경/],
   ['non-main source', f => mkdirSync(join(f.repo, '.git'), { recursive: true }), { FAKE_BRANCH: 'topic' }, /main 브랜치/],
   ['no numeric accounts', f => { for (const n of [0, 1, 2]) rmSync(join(f.aside, 'u', String(n)), { recursive: true }); }, {}, /설치할 Aside 계정/],
 ]) {
@@ -223,4 +226,66 @@ test('missing shared engine refuses before installing any profile', t => {
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /공통 엔진이 없습니다/);
   assert.deepEqual(tree(join(f.aside, 'u')), before);
+});
+
+test('dirty source is renamed intact and replaced with a fresh clone', t => {
+  const f = fixture(t);
+  success(f.run());
+  put(join(f.repo, 'engine.mjs'), '// local development\n');
+  put(join(f.repo, 'untracked.txt'), 'keep untracked work\n');
+  put(join(f.repo, '.git/local-state'), 'keep git state\n');
+  rmSync(join(f.repo, 'assets/template/marker.txt'));
+  const before = tree(f.repo);
+  const result = f.run({ FAKE_DIRTY: ' M engine.mjs\n D assets/template/marker.txt\n?? untracked.txt\n' });
+  success(result);
+  const backups = readdirSync(f.root).filter(name => name.startsWith('source.backup-'));
+  assert.equal(backups.length, 1);
+  const backup = join(f.root, backups[0]);
+  assert.match(backups[0], /^source\.backup-\d{8}-\d{6}-\d+$/);
+  assert.deepEqual(tree(backup), before);
+  assert.equal(readFileSync(join(f.repo, 'engine.mjs'), 'utf8'), '// shared engine fixture\n');
+  assert.equal(existsSync(join(f.repo, 'untracked.txt')), false);
+  assert.match(result.stdout, /로컬 수정 저장소 백업:/);
+  assert.ok(result.stdout.includes(backup));
+  assert.doesNotMatch(readFileSync(f.log, 'utf8'), /pull --ff-only/);
+  for (const n of [0, 1, 2]) installed(f, n);
+});
+
+for (const reason of ['clone failure', 'invalid payload']) {
+  test(`dirty source remains untouched on ${reason}`, t => {
+    const f = fixture(t);
+    success(f.run());
+    put(join(f.repo, 'engine.mjs'), '// local work must survive\n');
+    const beforeRepo = tree(f.repo);
+    const beforeProfiles = tree(join(f.aside, 'u'));
+    if (reason === 'invalid payload') rmSync(join(f.source, 'engine.mjs'));
+    const result = f.run({ FAKE_DIRTY: ' M engine.mjs\n', ...(reason === 'clone failure' ? { FAKE_CLONE_FAIL: '1' } : {}) });
+    assert.notEqual(result.status, 0);
+    assert.deepEqual(tree(f.repo), beforeRepo);
+    assert.deepEqual(tree(join(f.aside, 'u')), beforeProfiles);
+    assert.deepEqual(readdirSync(f.root).filter(name => name.startsWith('source.backup-')), []);
+    assert.deepEqual(readdirSync(f.aside).filter(name => name.startsWith('.automation-creator-install.')), []);
+  });
+}
+
+test('failed promotion restores the original dirty source before profile writes', t => {
+  const f = fixture(t);
+  success(f.run());
+  put(join(f.repo, 'engine.mjs'), '// keep local source\n');
+  const beforeRepo = tree(f.repo);
+  const beforeProfiles = tree(join(f.aside, 'u'));
+  put(join(f.bin, 'mv'), `#!/bin/bash
+case "$1" in
+  "$ASIDE_HOME"/.automation-creator-install.*/repository) exit 97 ;;
+esac
+exec /bin/mv "$@"
+`);
+  chmodSync(join(f.bin, 'mv'), 0o755);
+  clean(join(f.bin, 'mv'));
+  const result = f.run({ FAKE_DIRTY: ' M engine.mjs\n' });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /기존 저장소를 복원/);
+  assert.deepEqual(tree(f.repo), beforeRepo);
+  assert.deepEqual(tree(join(f.aside, 'u')), beforeProfiles);
+  assert.deepEqual(readdirSync(f.root).filter(name => name.startsWith('source.backup-')), []);
 });
