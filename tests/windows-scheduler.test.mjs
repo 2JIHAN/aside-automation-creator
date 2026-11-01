@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -23,7 +23,7 @@ test('scheduler scripts have Windows PowerShell 5.1-readable UTF8 BOM', () => {
 });
 
 test('mocked scheduler installs, reinstalls and removes only its own interactive hourly task', { skip: !available }, t => {
-  const root = mkdtempSync(join(tmpdir(), 'aside-windows-scheduler-'));
+  const root = realpathSync.native(mkdtempSync(join(tmpdir(), 'aside-windows-scheduler-')));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const scenario = join(root, "scenario's files");
   const home = join(root, 'home');
@@ -75,7 +75,7 @@ Assert ($Task.Triggers[0].Interval.TotalHours -eq 1) 'not hourly'
 $First = Join-Path $HOME 'background/Friendly Test-hourly-30.ps1'
 Assert (Test-Path -LiteralPath $First) 'missing launcher'
 Assert ($Task.Actions[0].Arguments -eq ('-NoProfile -NonInteractive -ExecutionPolicy RemoteSigned -File "' + $First + '"')) 'action not named launcher'
-Assert ($Task.Actions[0].WorkingDirectory -eq $env:TEST_SCENARIO) 'wrong working directory'
+Assert ($Task.Actions[0].WorkingDirectory -eq $env:TEST_SCENARIO) ('wrong working directory: actual=' + $Task.Actions[0].WorkingDirectory + '; expected=' + $env:TEST_SCENARIO)
 $Text = [IO.File]::ReadAllText($First)
 Assert ($Text.Contains($env:ASIDE_NODE_PATH) -and $Text.Contains($env:ASIDE_CLI_PATH) -and $Text.Contains($env:TEST_REPO)) 'missing captured paths'
 Assert (-not $Text.Contains('fixture')) 'secret content copied'

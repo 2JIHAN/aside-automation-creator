@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, copyFileSync, readdirSync, existsSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, copyFileSync, readdirSync, existsSync, rmSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -45,7 +45,8 @@ function put(file, content) {
 }
 
 function fixture(t) {
-  const root = mkdtempSync(join(tmpdir(), 'aside-native-'));
+  // PowerShell expands short TEMP aliases when resolving $PSScriptRoot.
+  const root = realpathSync.native(mkdtempSync(join(tmpdir(), 'aside-native-')));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const scenario = join(root, '루틴 공백 & mkdir shell-injected & rem');
   const repository = join(root, '공통 엔진');
@@ -94,8 +95,10 @@ test('Windows native PE CLI preserves account, Korean UTF-8 output and multiline
   assert.deepEqual(calls[1].slice(0, 5), ['exec', '--account', 'u7', '--effort', 'low']);
   assert.equal(calls[1].length, 6, 'multiline prompt remains one native argument');
   assert.match(calls[1][5], /\n/);
-  assert.ok(calls[1][5].includes(join(f.scenario, 'workflow/단계.md')));
-  assert.ok(calls[1][5].includes(join(f.scenario, 'workflow/context.md')));
+  for (const file of ['단계.md', 'context.md']) {
+    const expected = join(f.scenario, 'workflow', file);
+    assert.ok(calls[1][5].includes(expected), JSON.stringify({ expected, actualPrompt: calls[1][5] }));
+  }
   const runs = join(f.scenario, 'runtime/runs');
   const folders = readdirSync(runs);
   assert.equal(folders.length, 1);
