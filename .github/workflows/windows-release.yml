@@ -128,7 +128,7 @@ jobs:
         with:
           node-version: '26'
       - name: Test macOS package installation without real profiles
-        run: node --test assets/template/tests/scenario.test.mjs tests/install-to-aside.test.mjs tests/macos-*.test.mjs
+        run: ASIDE_AUTOMATION_CREATOR_REPO="$PWD" node --test assets/template/tests/scenario.test.mjs tests/install-to-aside.test.mjs tests/macos-*.test.mjs
       - name: Build universal macOS installer for review
         env:
           RELEASE_REF: ${{ github.ref_name }}

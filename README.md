@@ -4,7 +4,7 @@
 
 # Aside Automation Creator
 
-Aside에서 실제 업무를 함께 진행한 뒤, 확인한 순서를 다시 실행할 수 있는 자동화로 만드는 스킬입니다. 작업 방법과 예외 처리 기준을 대화로 정하면, 에이전트가 실행에 필요한 파일을 만들고 검증합니다.
+Aside에서 반복할 업무를 가르치고, 같은 순서로 다시 실행하도록 만드는 스킬입니다. 작업을 함께 진행하면서 결과 확인 방법과 예외가 생겼을 때 할 일을 정합니다.
 
 ## 설치하기
 
@@ -12,7 +12,7 @@ Aside에서 실제 업무를 함께 진행한 뒤, 확인한 순서를 다시 �
 
 | 운영체제 | 파일 | CPU |
 | --- | --- | --- |
-| macOS | [DMG 다운로드](https://github.com/2JIHAN/aside-automation-creator/releases/latest) | Apple Silicon과 Intel 공용 |
+| macOS 13.5 이상 | [DMG 다운로드](https://github.com/2JIHAN/aside-automation-creator/releases/latest) | Apple Silicon과 Intel 공용 |
 | Windows | [x64 Setup 다운로드](https://github.com/2JIHAN/aside-automation-creator/releases/latest) | Intel 또는 AMD |
 | Windows | [ARM64 Setup 다운로드](https://github.com/2JIHAN/aside-automation-creator/releases/latest) | Windows ARM |
 
@@ -20,7 +20,7 @@ Aside에서 실제 업무를 함께 진행한 뒤, 확인한 순서를 다시 �
 2. macOS는 DMG를 열어 안에 있는 설치 앱을 실행하고, Windows는 Setup을 실행하세요.
 3. 설치가 끝나면 Aside에서 새 채팅을 여세요.
 
-터미널이나 Git, Node.js를 미리 준비할 필요는 없습니다. 설치기가 전용 Node.js와 필요한 공식 Aside CLI를 준비합니다. 운영체제의 보안 경고가 표시될 수 있으니, 다운로드한 릴리즈의 출처를 확인하세요. 사이트 로그인과 기기 승인은 직접 해야 합니다.
+터미널이나 Git, Node.js를 미리 준비할 필요는 없습니다. 설치기가 전용 Node.js와 필요한 공식 Aside CLI를 준비합니다. Windows에서는 미서명 Setup에 SmartScreen 경고가 표시될 수 있습니다. 사이트 로그인과 기기 승인은 직접 해야 합니다.
 
 스킬을 설치해도 업무나 예약 실행이 바로 시작되지는 않습니다.
 
@@ -46,6 +46,8 @@ aside-automation-creator로 예약 관리 페이지에서 새 예약을 확인�
 설치기는 기존 로컬 Aside 프로필에 스킬을 연결합니다. 기존 공통 소스를 교체할 때는 전체를 백업하며, 계정을 초기화하거나 사용자 암호를 저장하지 않습니다.
 
 Windows Setup 자체는 미서명 프로그램입니다. Setup이 준비하는 공식 CLI 설치기는 서명과 발행자, 타임스탬프를 검증하지만, 이것이 Setup 자체의 서명을 뜻하지는 않습니다. Node.js는 전용 런타임으로 포함하며 전역으로 설치하지 않습니다. PowerShell 실행 정책은 설치 프로세스에서만 RemoteSigned를 사용하고 조직 정책은 우회하지 않습니다. Setup으로 설치한 소스는 Setup을 다시 실행해 업데이트하세요.
+
+macOS 설치 앱은 Developer ID로 서명하며, 공개 배포 전에 Apple 공증과 Gatekeeper 검사를 확인합니다.
 
 ### macOS 수동 설치
 
