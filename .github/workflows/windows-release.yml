@@ -83,7 +83,8 @@ jobs:
           $cli = Join-Path $env:LOCALAPPDATA 'Aside/CLI/current/aside.exe'
           $repository = Join-Path $HOME '.local/share/aside-automation-creator'
           if (Test-Path -LiteralPath $repository) { throw 'Smoke test refuses an existing canonical repository.' }
-          New-Item -ItemType Directory -Path $profile, (Split-Path -Parent $cli) -Force | Out-Null
+          New-Item -ItemType Directory -Path $profile -Force | Out-Null
+          if (Test-Path -LiteralPath (Split-Path -Parent $cli)) { throw 'Fresh CLI fixture must not precreate the current junction path.' }
           $setup = @(Get-ChildItem "$env:RUNNER_TEMP/setup-output/*-Setup.exe")
           if ($setup.Count -ne 1) { throw 'Expected one x64 Setup executable.' }
           $log = Join-Path $fixture 'setup.log'
@@ -100,7 +101,7 @@ jobs:
           if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -ne 'CN=AT YOUR SIDE INC, O=AT YOUR SIDE INC, L=San Francisco, S=California, C=US' -or $null -eq $signature.TimeStamperCertificate) { throw 'Installed Aside CLI signature was not verified.' }
           $version = & (Join-Path $repository 'runtime/node.exe') --version
           if ($LASTEXITCODE -ne 0 -or $version -ne $env:EXPECTED_NODE_VERSION) { throw 'Installed bundled Node did not execute with the expected version.' }
-          Write-Output "PASS x64 Setup smoke: fixture profile, official signed CLI installation, packaged source deployment, bundled Node $version. No real browser, login, or CLI commands tested."
+          Write-Output "PASS x64 Setup smoke: fixture profile, official signed CLI installation, packaged source deployment, bundled Node $version. No real browser, login, or automation execution tested."
       - name: Show installer diagnostics after failure
         if: failure() && matrix.architecture == 'x64'
         shell: pwsh
