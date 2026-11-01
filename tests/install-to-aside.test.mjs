@@ -19,7 +19,7 @@ function put(path, text) {
 }
 
 function clean(path) {
-  if (!darwin) return;
+  if (!darwin || !existsSync(cleaner)) return;
   const result = spawnSync('/bin/bash', [cleaner, path], { encoding: 'utf8' });
   assert.equal(result.status, 0, result.stderr || result.stdout);
 }
@@ -77,7 +77,7 @@ exit 94
   }
   clean(root);
   const dest = n => join(aside, 'u', String(n), 'skills', 'user', skill);
-  const run = (extra = {}) => spawnSync('/bin/bash', [installer], {
+  const run = (extra = {}, args = []) => spawnSync('/bin/bash', [installer, ...args], {
     encoding: 'utf8', timeout: 20000,
     env: { ...process.env, HOME: home, ASIDE_HOME: aside, ASIDE_AUTOMATION_CREATOR_REPO: repo,
       PATH: `${bin}:/usr/bin:/bin:/usr/sbin:/sbin`, FAKE_SOURCE: source, FAKE_GIT_LOG: log,
@@ -288,4 +288,72 @@ exec /bin/mv "$@"
   assert.deepEqual(tree(f.repo), beforeRepo);
   assert.deepEqual(tree(join(f.aside, 'u')), beforeProfiles);
   assert.deepEqual(readdirSync(f.root).filter(name => name.startsWith('source.backup-')), []);
+});
+
+function packageSource(f) {
+  put(join(f.source, 'runtime/node'), '#!/bin/sh\nexit 0\n');
+  chmodSync(join(f.source, 'runtime/node'), 0o755);
+  clean(f.source);
+}
+
+test('source package copies bundled Node without Git and backs up whole owned repository and profiles', t => {
+  const f = fixture(t); packageSource(f);
+  put(join(f.dest(1), 'local.txt'), 'keep profile');
+  success(f.run({}, ['--source-directory', f.source]));
+  assert.equal(existsSync(f.log), false);
+  assert.deepEqual(readdirSync(f.repo).sort(), ['.aside-automation-creator-package', 'README.md', 'SKILL.md', 'assets', 'engine.mjs', 'install-to-aside.sh', 'runtime']);
+  assert.equal(readFileSync(join(f.repo, 'runtime/node'), 'utf8'), readFileSync(join(f.source, 'runtime/node'), 'utf8'));
+  put(join(f.repo, 'local.txt'), 'keep repo'); const before = tree(f.repo);
+  success(f.run({}, ['--source-directory', f.source]));
+  const backups = readdirSync(f.root).filter(n => n.startsWith('source.backup-'));
+  assert.equal(backups.length, 1); assert.deepEqual(tree(join(f.root, backups[0])), before);
+  assert.equal(existsSync(f.log), false);
+  for (const n of [0,1,2]) installed(f,n);
+});
+
+for (const kind of ['wrong origin', 'unrelated', 'symlink runtime', 'nested runtime symlink', 'symlink root', 'missing engine']) {
+  test('source package refuses ' + kind + ' without changing existing files', t => {
+    const f=fixture(t); packageSource(f);
+    if (kind === 'wrong origin') put(join(f.repo,'.git/config'), '[remote "origin"]\n url = https://example.invalid/other\n');
+    if (kind === 'unrelated') put(join(f.repo,'sentinel'), 'keep');
+    if (kind === 'symlink runtime') { rmSync(join(f.source,'runtime'),{recursive:true}); symlinkSync(f.bin,join(f.source,'runtime')); }
+    if (kind === 'nested runtime symlink') { symlinkSync(join(f.source,'SKILL.md'),join(f.source,'runtime/nested-link')); }
+    if (kind === 'symlink root') { rmSync(join(f.source,'README.md')); symlinkSync(join(f.source,'SKILL.md'),join(f.source,'README.md')); }
+    if (kind === 'missing engine') rmSync(join(f.source,'engine.mjs'));
+    const repo=tree(f.repo), profiles=tree(join(f.aside,'u'));
+    assert.notEqual(f.run({},['--source-directory',f.source]).status,0);
+    assert.deepEqual(tree(f.repo),repo); assert.deepEqual(tree(join(f.aside,'u')),profiles);
+    assert.equal(existsSync(f.log),false);
+  });
+}
+
+test('source package recognizes expected local Git origin without invoking Git', t => {
+  const f=fixture(t); packageSource(f);
+  put(join(f.repo,'.git/config'), '[remote "origin"]\n\turl = '+url+'\n');
+  success(f.run({},['--source-directory',f.source])); assert.equal(existsSync(f.log),false);
+});
+
+test('source package failed promotion restores entire owned repo before profile writes', t => {
+  const f=fixture(t); packageSource(f);
+  success(f.run({},['--source-directory',f.source]));
+  put(join(f.repo,'local.txt'),'keep'); const before=tree(f.repo), profiles=tree(join(f.aside,'u'));
+  put(join(f.bin,'mv'), '#!/bin/bash\ncase "$1" in "$ASIDE_HOME"/.automation-creator-install.*/repository) exit 97 ;; esac\nexec /bin/mv "$@"\n');
+  chmodSync(join(f.bin,'mv'),0o755); clean(join(f.bin,'mv'));
+  assert.notEqual(f.run({},['--source-directory',f.source]).status,0);
+  assert.deepEqual(tree(f.repo),before); assert.deepEqual(tree(join(f.aside,'u')),profiles);
+  assert.equal(existsSync(f.log),false);
+});
+
+test('source package refuses symlink ancestors of repository without outside writes or backups', t => {
+  const f=fixture(t); packageSource(f);
+  const outside=join(f.root,'outside'), externalRepo=join(outside,'share/aside-automation-creator');
+  put(join(externalRepo,'.aside-automation-creator-package'),url+'\n');
+  put(join(externalRepo,'local.txt'),'keep owned repo');
+  put(join(outside,'bin/aside'),'keep CLI');
+  symlinkSync(outside,join(f.home,'.local'));
+  const before=tree(outside), profiles=tree(join(f.aside,'u'));
+  const result=f.run({ASIDE_AUTOMATION_CREATOR_REPO:join(f.home,'.local/share/aside-automation-creator')},['--source-directory',f.source]);
+  assert.notEqual(result.status,0); assert.match(result.stderr,/상위 경로가 심볼릭 링크/);
+  assert.deepEqual(tree(outside),before); assert.deepEqual(tree(join(f.aside,'u')),profiles);
+  assert.equal(existsSync(f.log),false);
 });

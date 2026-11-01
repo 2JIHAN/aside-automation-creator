@@ -2,19 +2,23 @@
 set -eu
 DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 export PATH="$HOME/.local/bin:$HOME/.aside/runtime/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+ENGINE_REPO=${ASIDE_AUTOMATION_CREATOR_REPO:-"$HOME/.local/share/aside-automation-creator"}
+NODE=${ASIDE_NODE_PATH:-$(command -v node || true)}
+NODE=${NODE:-"$ENGINE_REPO/runtime/node"}
+ASIDE_CLI_PATH=${ASIDE_CLI_PATH:-"$HOME/.local/bin/aside"}
 MINUTE=${1:-30}
 case "$MINUTE" in ''|*[!0-9]*) echo '실행 분은 0-59 정수여야 합니다.' >&2; exit 2 ;; esac
 [ "$MINUTE" -le 59 ] || { echo '실행 분은 0-59여야 합니다.' >&2; exit 2; }
 LABEL=io.local.routines.__AUTOMATION_SLUG__
 case "$LABEL" in *'__AUTOMATION_'*) echo '템플릿 값을 먼저 확정하세요.' >&2; exit 2 ;; esac
 LAUNCHER="$HOME/background/__AUTOMATION_NAME__-매시${MINUTE}분"
-CONFIG=$(node - "$DIR" "$MINUTE" "$LABEL" "$LAUNCHER" "${ASIDE_AUTOMATION_CREATOR_REPO:-$HOME/.local/share/aside-automation-creator}" <<'JS'
-const [dir, minute, label, launcher, engineRepo] = process.argv.slice(2);
+CONFIG=$("$NODE" - "$DIR" "$MINUTE" "$LABEL" "$LAUNCHER" "$ENGINE_REPO" "$NODE" "$ASIDE_CLI_PATH" "${ASIDE_CLI_AUTH_PATH:-}" <<'JS'
+const [dir, minute, label, launcher, engineRepo, nodePath, cliPath, authPath] = process.argv.slice(2);
 console.log(JSON.stringify({
   Label: label,
   ProgramArguments: [launcher],
   WorkingDirectory: dir,
-  EnvironmentVariables: { ASIDE_AUTOMATION_CREATOR_REPO: require("path").resolve(engineRepo) },
+  EnvironmentVariables: { ASIDE_AUTOMATION_CREATOR_REPO: require("path").resolve(engineRepo), ASIDE_NODE_PATH: require("path").resolve(nodePath), ASIDE_CLI_PATH: require("path").resolve(cliPath), ...(authPath ? { ASIDE_CLI_AUTH_PATH: require("path").resolve(authPath) } : {}) },
   StartCalendarInterval: { Minute: Number(minute) },
   RunAtLoad: false,
   StandardOutPath: dir + '/runtime/runs/launchd.log',
@@ -39,7 +43,7 @@ elif launchctl print "$DOMAIN/$LABEL" >/dev/null 2>&1; then
   echo '등록 파일의 소유권을 확인하지 못한 서비스는 변경하지 않습니다.' >&2; exit 1
 fi
 if launchctl print "$DOMAIN/$LABEL" >/dev/null 2>&1; then launchctl bootout "$DOMAIN/$LABEL"; fi
-node - "$DIR" "$LAUNCHER" <<'JS'
+"$NODE" - "$DIR" "$LAUNCHER" <<'JS'
 const fs = require('fs');
 const [dir, launcher] = process.argv.slice(2);
 const quoted = "'" + (dir + '/run.sh').replaceAll("'", "'\\''") + "'";

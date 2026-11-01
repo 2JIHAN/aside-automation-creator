@@ -46,8 +46,21 @@ check_source() {
 }
 
 main() {
-  [ "$#" -eq 0 ] || fail '인수 없이 실행하세요.'
-  command -v git >/dev/null || fail 'Git이 필요합니다.'
+  local source_directory=''
+  if [ "$#" -ne 0 ]; then
+    [ "$#" -eq 2 ] && [ "$1" = --source-directory ] || fail '사용법: install-to-aside.sh [--source-directory PAYLOAD]'
+    source_directory="$2"
+    [ -d "$source_directory" ] && [ ! -L "$source_directory" ] || fail '패키지 폴더가 없거나 심볼릭 링크입니다.'
+    [ -z "$(find "$source_directory" -type l -print -quit)" ] || fail '패키지의 심볼릭 링크는 설치하지 않습니다.'
+    source_directory=$(cd "$source_directory" && pwd -P)
+    check_source "$source_directory"
+    for file in README.md install-to-aside.sh runtime/node; do
+      [ -f "$source_directory/$file" ] || fail "패키지 파일이 없습니다: $file"
+    done
+    [ -x "$source_directory/runtime/node" ] || fail '패키지 Node 실행 권한이 없습니다.'
+  else
+    command -v git >/dev/null || fail 'Git이 필요합니다.'
+  fi
   ASIDE_HOME=${ASIDE_HOME:-"$HOME/.aside"}
   REPO=${ASIDE_AUTOMATION_CREATOR_REPO:-"$HOME/.local/share/aside-automation-creator"}
   URL=https://github.com/2JIHAN/aside-automation-creator.git
@@ -60,11 +73,26 @@ main() {
     case "$number" in ''|*[!0-9]*) continue ;; esac
     [ ! -L "$account" ] || fail "계정 경로가 심볼릭 링크입니다: $account"
     [ -d "$account" ] || continue
-    for parent in "$account/skills" "$account/skills/user"; do [ ! -L "$parent" ] || fail "스킬 경로가 심볼릭 링크입니다: $parent"; done
+    for parent in "$account/skills" "$account/skills/user"; do
+      [ ! -L "$parent" ] || fail "스킬 경로가 심볼릭 링크입니다: $parent"
+      [ ! -e "$parent" ] || [ -d "$parent" ] || fail "스킬 경로가 폴더가 아닙니다: $parent"
+    done
     accounts+=("$account")
   done
   [ "${#accounts[@]}" -gt 0 ] || fail '설치할 Aside 계정이 없습니다.'
   [ ! -L "$REPO" ] || fail "저장소 경로가 심볼릭 링크입니다: $REPO"
+  # 기존 폴더도 상위 경로 전체를 확인한다. macOS의 시스템 별칭만 허용한다.
+  parent=$(dirname "$REPO")
+  while [ "$parent" != / ] && [ "$parent" != . ]; do
+    if [ -L "$parent" ]; then
+      case "$parent:$(readlink "$parent")" in
+        /var:private/var|/var:/private/var|/tmp:private/tmp|/tmp:/private/tmp)
+          [ "$(uname -s)" = Darwin ] || fail "저장소 상위 경로가 심볼릭 링크입니다: $parent" ;;
+        *) fail "저장소 상위 경로가 심볼릭 링크입니다: $parent" ;;
+      esac
+    fi
+    parent=$(dirname "$parent")
+  done
   ensure_dir "$(dirname "$REPO")"
   WORKDIR=$(mktemp -d "$ASIDE_HOME/.automation-creator-install.XXXXXX")
   trap 'rm -rf -- "$WORKDIR"' EXIT
@@ -72,7 +100,37 @@ main() {
   touch "$WORKDIR/start"
   clear_one "$WORKDIR/start"
 
-  if [ -e "$REPO" ]; then
+  if [ -n "$source_directory" ]; then
+    if [ -e "$REPO" ]; then
+      if [ -f "$REPO/.aside-automation-creator-package" ] && [ ! -L "$REPO/.aside-automation-creator-package" ] && grep -Fxq "$URL" "$REPO/.aside-automation-creator-package"; then
+        :
+      elif [ -d "$REPO/.git" ] && [ ! -L "$REPO/.git" ] && [ -f "$REPO/.git/config" ] && [ ! -L "$REPO/.git/config" ] && awk -v url="$URL" '
+        /^\[/{origin=($0 == "[remote \"origin\"]")}
+        origin && $1 == "url" && $2 == "=" && $3 == url {found=1}
+        END {exit !found}
+      ' "$REPO/.git/config"; then
+        :
+      else
+        fail "다른 폴더 또는 원본 저장소 주소가 다른 폴더를 덮어쓰지 않습니다: $REPO"
+      fi
+    fi
+    local fresh="$WORKDIR/repository" repo_backup=''
+    mkdir "$fresh"
+    for file in SKILL.md engine.mjs README.md install-to-aside.sh assets runtime; do cp -R "$source_directory/$file" "$fresh/"; done
+    printf '%s\n' "$URL" > "$fresh/.aside-automation-creator-package"
+    clear_tree "$fresh"
+    check_source "$fresh"
+    if [ -e "$REPO" ]; then
+      repo_backup="$REPO.backup-$(date +%Y%m%d-%H%M%S)-$"
+      [ ! -e "$repo_backup" ] && [ ! -L "$repo_backup" ] || fail "백업 경로가 이미 있습니다: $repo_backup"
+      mv "$REPO" "$repo_backup"
+    fi
+    if ! mv "$fresh" "$REPO"; then
+      if [ -n "$repo_backup" ] && [ ! -e "$REPO" ] && [ ! -L "$REPO" ]; then mv "$repo_backup" "$REPO"; fi
+      fail '새 저장소 배치 실패. 기존 저장소를 복원했습니다.'
+    fi
+    if [ -n "$repo_backup" ]; then printf '기존 패키지 저장소 백업: %s\n' "$repo_backup"; fi
+  elif [ -e "$REPO" ]; then
     [ -d "$REPO/.git" ] || fail "다른 폴더를 덮어쓰지 않습니다: $REPO"
     [ "$(git -C "$REPO" remote get-url origin)" = "$URL" ] || fail '원본 저장소 주소가 다릅니다.'
     [ "$(git -C "$REPO" symbolic-ref --short HEAD)" = main ] || fail 'main 브랜치가 아닙니다.'

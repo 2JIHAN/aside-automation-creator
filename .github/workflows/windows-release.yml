@@ -1,4 +1,4 @@
-name: Windows Setup
+name: Installers
 on:
   workflow_dispatch:
   push:
@@ -6,12 +6,16 @@ on:
     paths:
       - '**/*.mjs'
       - '**/*.ps1'
+      - '**/*.sh'
+      - 'installer/macos/**'
       - 'installer/windows/**'
       - '.github/workflows/windows-release.yml'
   pull_request:
     paths:
       - '**/*.mjs'
       - '**/*.ps1'
+      - '**/*.sh'
+      - 'installer/macos/**'
       - 'installer/windows/**'
       - '.github/workflows/windows-release.yml'
 permissions:
@@ -116,16 +120,37 @@ jobs:
           name: windows-setup-${{ matrix.architecture }}
           path: ${{ runner.temp }}/setup-output/*-Setup.exe
           if-no-files-found: error
+  macos:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26'
+      - name: Test macOS package installation without real profiles
+        run: node --test assets/template/tests/scenario.test.mjs tests/install-to-aside.test.mjs tests/macos-*.test.mjs
+      - name: Build universal macOS installer for review
+        env:
+          RELEASE_REF: ${{ github.ref_name }}
+        run: |
+          version=0.0.0
+          if [ "$GITHUB_REF_TYPE" = tag ]; then version="${RELEASE_REF#v}"; fi
+          bash installer/macos/build.sh --build "$RUNNER_TEMP/setup-output" "$version"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-setup
+          path: ${{ runner.temp }}/setup-output/*-Setup.dmg
+          if-no-files-found: error
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [test, build]
+    needs: [test, build, macos]
     runs-on: windows-latest
     permissions:
       contents: write
     steps:
       - uses: actions/download-artifact@v4
         with:
-          pattern: windows-setup-*
+          pattern: '*-setup*'
           merge-multiple: true
           path: release-assets
       - name: Publish Setup executables and SHA256 checksums
@@ -135,13 +160,13 @@ jobs:
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
-          $files = @(Get-ChildItem release-assets/*-Setup.exe | Sort-Object Name)
-          if ($files.Count -ne 2) { throw 'Expected x64 and arm64 Setup executables.' }
+          $files = @(Get-ChildItem release-assets -File | Where-Object { $_.Name -like '*-Setup.exe' -or $_.Name -like '*-Setup.dmg' } | Sort-Object Name)
+          if ($files.Count -ne 3) { throw 'Expected Windows x64, Windows arm64 and universal macOS installers.' }
           $lines = $files | ForEach-Object { (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant() + '  ' + $_.Name }
           [IO.File]::WriteAllLines((Join-Path $PWD 'release-assets/SHA256SUMS.txt'), $lines, [Text.UTF8Encoding]::new($false))
           gh release view $env:RELEASE_TAG --repo $env:GH_REPO *> $null
           if ($LASTEXITCODE -ne 0) {
-            gh release create $env:RELEASE_TAG --repo $env:GH_REPO --verify-tag --title $env:RELEASE_TAG --notes 'Download the Setup matching your Windows architecture. Aside must already be installed and opened once. Git and Node are not prerequisites. These community installers are unsigned, so Windows SmartScreen may warn. SHA256SUMS.txt verifies download integrity, not publisher identity.'
+            gh release create $env:RELEASE_TAG --repo $env:GH_REPO --verify-tag --draft --title $env:RELEASE_TAG --notes 'Draft release. macOS CI output is ad-hoc signed and must be replaced with the locally signed and notarized DMG before publishing. Windows Setup is unsigned. Aside must already be installed and opened once. No Git or Node prerequisite.'
             if ($LASTEXITCODE -ne 0) { throw 'Creating GitHub Release failed.' }
           }
           $assets = @(Get-ChildItem release-assets -File | ForEach-Object FullName)
