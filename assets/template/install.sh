@@ -65,4 +65,4 @@ if [ "$OLD_LAUNCHER" != "$LAUNCHER" ]; then
   esac
 fi
 launchctl bootstrap "$DOMAIN" "$DEST"
-echo "등록 완료: $LAUNCHER / 매시 $MINUTE분. 지금 실행하지는 않습니다."
+echo "등록 완료: $LAUNCHER / 매시 ${MINUTE}분. 지금 실행하지는 않습니다."
