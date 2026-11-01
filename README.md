@@ -4,11 +4,25 @@
 
 평소처럼 작업을 보여주고 목표와 예외 대응을 정하면, 에이전트가 단계 지침과 실행 흐름을 작성합니다. 자동화 파일은 기본적으로 `~/aside-automations/<slug>/`에 생성합니다.
 
-## 설치하고 시작하기
+## Windows: 클릭해서 설치
+
+[GitHub Releases에서 Windows Setup 다운로드](https://github.com/2JIHAN/aside-automation-creator/releases/latest)
+
+1. Aside 브라우저를 설치하고 한 번 실행해 프로필을 만드세요.
+2. PC에 맞는 x64 또는 ARM64 Setup.exe를 내려받아 실행하세요.
+3. 설치 마법사에서 진행한 뒤 Aside의 새 채팅에서 자동화를 요청하세요.
+
+Node.js는 전용 런타임으로 포함되어 있고, Aside CLI가 없으면 공식 서명과 발행자를 확인한 뒤 준비합니다. **일반 사용자는 터미널, Git, Node 사전 설치가 필요 없습니다.** 브라우저 로그인이나 필요한 기기 승인은 사용자가 직접 진행해야 하며 설치기가 계정을 초기화하거나 대신 승인하지 않습니다.
+
+Setup은 사용자 폴더에 설치하고, 기존 공통 소스가 있으면 전체 백업을 남깁니다. 스킬은 기존 숫자 프로필들에 연결합니다. 예약이나 실제 업무는 자동으로 시작하지 않습니다. Node를 전역으로 설치하지 않으며 이후 Windows 실행기는 공통 소스의 runtime/node.exe도 찾습니다.
+
+현재 Setup 자체는 코드 서명 인증서가 없어 Windows SmartScreen 경고가 나타날 수 있습니다. Node와 Aside CLI의 공식 서명 검증과는 별개입니다. 설치기의 PowerShell 실행 정책은 해당 프로세스에만 RemoteSigned를 사용하며 시스템 설정을 바꾸지 않고 조직 정책도 우회하지 않습니다.
+
+## 명령줄로 설치하려면
 
 ### 1. 실행 환경 준비
 
-Aside를 실행하고 사용할 프로필을 만들어 두세요. 아래 설치에는 macOS와 Git이 필요하며, `npx skills`에는 Node.js 22.20 이상이 필요합니다.
+Aside를 실행하고 사용할 프로필을 만들어 두세요. 아래 설치에는 macOS 또는 Windows와 Git이 필요하며, `npx skills`에는 Node.js 22.20 이상이 필요합니다.
 
 실제 자동화를 실행할 때는 Aside CLI도 설치하고 실행 계정으로 로그인해야 합니다. 스킬 설치만으로 CLI나 로그인 정보가 준비되지는 않습니다.
 
@@ -24,6 +38,8 @@ npx skills add 2JIHAN/aside-automation-creator
 
 ### 3. Aside에 스킬 연결
 
+#### macOS
+
 같은 터미널에서 아래 한 줄을 실행하세요.
 
 ```sh
@@ -35,6 +51,22 @@ curl -fsSL https://raw.githubusercontent.com/2JIHAN/aside-automation-creator/mai
 나중에 업데이트하거나 새 프로필을 추가했을 때도 같은 명령을 다시 실행하세요. 로컬 수정이 없으면 공용 저장소를 `git pull --ff-only`로 갱신한 뒤 각 프로필에 반영합니다. 로컬 수정이 있으면 새 소스를 먼저 내려받아 검사하고, 기존 저장소 전체를 `aside-automation-creator.backup-<날짜와 시각>-<PID>`로 보존한 뒤 원래 경로에 새로 설치합니다. 백업은 공용 저장소와 같은 상위 폴더에 남고, 경로는 설치 결과에 표시됩니다. 새 소스 다운로드나 검사가 실패하면 기존 저장소와 프로필을 그대로 유지합니다.
 
 실행 내용을 먼저 확인하려면 [설치 스크립트](install-to-aside.sh)에서 확인 가능합니다.
+
+#### Windows
+
+Aside를 실행하는 **동일한 Windows 사용자**의 일반 PowerShell 창을 사용하세요. 관리자나 SYSTEM 계정으로 설치하거나 예약하지 않습니다. Git과 Node.js를 준비하고 Aside의 Settings > Developers에서 Windows CLI를 설치하세요. 설치 후 새 터미널에서 `Get-Command git, node, aside.exe`로 확인합니다. [공식 CLI 설치 안내](https://docs.aside.com/help/developers)를 참고하세요.
+
+다음 명령은 이 저장소의 설치 파일을 내려받습니다. 파일 내용을 확인한 뒤 해당 파일만 차단 해제하고 실행하세요. 기본 정책이 Restricted인 PC는 클릭 설치를 사용하세요.
+
+```powershell
+$installer = Join-Path $env:TEMP 'install-to-aside-automation.ps1'
+Invoke-WebRequest -UseBasicParsing -Uri 'https://raw.githubusercontent.com/2JIHAN/aside-automation-creator/main/install-to-aside.ps1' -OutFile $installer
+Get-Content -LiteralPath $installer
+Unblock-File -LiteralPath $installer
+& $installer
+```
+
+명령줄 설치는 Git을 사용하며, 프로필은 `$HOME\.aside\u\<번호>`, 공통 소스는 `$HOME\.local\share\aside-automation-creator`를 사용합니다. Setup 패키지로 설치한 소스의 업데이트는 Setup을 다시 실행하세요. 로컬 수정 전체 백업과 이전 스킬 보존은 macOS 설치기와 같은 방식입니다. 조직의 스크립트 실행 정책에 막히면 관리자에게 문의하세요. 시스템 실행 정책을 바꾸거나 인증 정보를 초기화하지 않습니다.
 
 ### 4. 새 채팅에서 자동화 만들기
 
@@ -53,14 +85,30 @@ aside-automation-creator로 이 업무를 같이 따라가면서 자동화 만�
 
 각 자동화 폴더에는 아래 파일들이 만들어집니다.
 
-- `run.sh`: 설치된 공통 엔진을 호출합니다.
+- `run.sh` 또는 `run.ps1`: 설치된 공통 엔진을 호출합니다.
 - `workflow/flow.json`: 상태와 다음 단계의 연결을 정합니다.
 - `workflow/context.md`, `workflow/steps/*.md`: 공통 원칙과 각 작업의 지침입니다.
 - `workflow/steps/learn.md`, `memory.md`: 조건부 학습 지침과 시나리오별 경험 및 시험 요약입니다.
-- `install.sh`, `uninstall.sh`: 트리거 등록과 해제를 담당합니다.
+- `install.sh`, `uninstall.sh` 또는 `install.ps1`, `uninstall.ps1`: 트리거 등록과 해제를 담당합니다.
 - `tests/`, `runtime/runs/`: 모의 테스트와 실제 실행 기록 및 증거를 분리합니다.
 
-제공된 시간 트리거는 macOS에서 매시 지정 분에 실행하는 예시입니다. 다른 실행 조건은 작업에 맞게 확인하고 구성합니다. 스킬을 설치하는 것만으로 자동화나 예약 실행이 시작되지는 않습니다.
+제공된 시간 트리거는 macOS LaunchAgent 또는 Windows Task Scheduler에서 매시 지정 분에 실행하는 예시입니다. 다른 실행 조건은 작업에 맞게 확인하고 구성합니다. 스킬을 설치하는 것만으로 자동화나 예약 실행이 시작되지는 않습니다.
+
+## Windows에서 실행과 예약
+
+자동화를 만든 폴더에서 실행합니다.
+
+```powershell
+.\run.ps1             # 실제 업무 1회 실행
+.\install.ps1 -Minute 30  # 매시 30분 예약, 즉시 실행하지 않음
+.\uninstall.ps1       # 이 자동화의 예약만 제거
+```
+
+예약은 로그인한 사용자의 제한된 권한으로 실행됩니다. Windows에 로그인하고 Aside와 필요한 사이트의 로그인 상태를 유지하세요. 사용자 암호를 저장하거나 SYSTEM 작업으로 등록하지 않습니다. 중복 실행은 건너뜁니다. 예약 분은 PC의 시스템 시간대를 따르며 업무의 TZ 설정과 별개입니다.
+
+기본 Windows CLI는 `$env:LOCALAPPDATA\Aside\CLI\current\aside.exe`입니다. 사용자 지정 설치는 `ASIDE_CLI_PATH`, Node.js는 `ASIDE_NODE_PATH` 또는 공통 소스의 `runtime/node.exe`, 공통 저장소는 `ASIDE_AUTOMATION_CREATOR_REPO`로 지정할 수 있습니다. Windows 실행기는 경로를 확인하고 예약 설치기는 필요한 경로를 실행기에 보존합니다. `ASIDE_CLI_AUTH_PATH`를 사용한다면 인증 파일 경로도 예약 실행에 유지합니다. 인증 파일 내용은 복사하거나 공개하지 않습니다.
+
+Windows PowerShell 5.1에서 한글 경로와 자동화 이름이 깨지지 않게 .ps1 파일은 UTF-8 BOM을 유지합니다. 현재 검증은 macOS의 PowerShell 7 파서와 모의 명령 실행입니다. 실제 Windows의 Aside, Task Scheduler, 키 저장소와 브라우저 동작은 별도 확인이 필요합니다.
 
 ## 예외 검토와 학습
 
@@ -81,3 +129,9 @@ ASIDE_AUTOMATION_CREATOR_REPO="$PWD" node --test assets/template/tests/scenario.
 ```
 
 공통 저장소를 다른 위치에 설치했다면 실행과 테스트에 `ASIDE_AUTOMATION_CREATOR_REPO`를 같은 경로로 설정하세요. 모든 시나리오가 같은 엔진을 사용하므로 저장소 업데이트는 해당 엔진을 쓰는 자동화 전체에 적용됩니다. 기존 엔진을 보유한 자동화는 자동으로 변경되지 않습니다.
+
+Windows 스크립트 테스트는 PowerShell이 있으면 다음 명령으로 실행합니다. 실행 파일을 찾지 못하면 `POWERSHELL_EXE`에 powershell.exe 또는 pwsh 경로를 지정하세요.
+
+```sh
+node --test tests/windows-*.test.mjs
+```

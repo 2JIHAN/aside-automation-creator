@@ -1,0 +1,137 @@
+name: Windows Setup
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+    paths:
+      - '**/*.mjs'
+      - '**/*.ps1'
+      - 'installer/windows/**'
+      - '.github/workflows/windows-release.yml'
+  pull_request:
+    paths:
+      - '**/*.mjs'
+      - '**/*.ps1'
+      - 'installer/windows/**'
+      - '.github/workflows/windows-release.yml'
+permissions:
+  contents: read
+jobs:
+  node-version:
+    runs-on: windows-latest
+    outputs:
+      version: ${{ steps.resolve.outputs.version }}
+    steps:
+      - id: resolve
+        shell: pwsh
+        run: |
+          $index = Invoke-RestMethod https://nodejs.org/dist/index.json
+          $version = ($index | Where-Object { $_.lts } | Select-Object -First 1).version
+          if ($version -notmatch '^v\d+\.\d+\.\d+$') { throw 'No exact Node LTS version found.' }
+          "version=$version" >> $env:GITHUB_OUTPUT
+  test:
+    needs: node-version
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        powershell: [powershell.exe, pwsh.exe]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ needs.node-version.outputs.version }}
+      - name: Test Windows PowerShell and PowerShell Core
+        shell: pwsh
+        env:
+          POWERSHELL_EXE: ${{ matrix.powershell }}
+        run: |
+          node --check engine.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $tests = @(Get-ChildItem tests/windows-*.test.mjs | ForEach-Object FullName)
+          node --test @tests
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+  build:
+    needs: [node-version, test]
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        architecture: [x64, arm64]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build native Setup with verified portable Node
+        shell: pwsh
+        env:
+          RELEASE_REF: ${{ github.ref_name }}
+          NODE_VERSION: ${{ needs.node-version.outputs.version }}
+          TARGET_ARCH: ${{ matrix.architecture }}
+        run: |
+          $version = '0.0.0'
+          if ($env:GITHUB_REF_TYPE -eq 'tag') { $version = $env:RELEASE_REF -replace '^v', '' }
+          ./installer/windows/build.ps1 -Architecture $env:TARGET_ARCH -NodeVersion $env:NODE_VERSION -Version $version -OutputDirectory "$env:RUNNER_TEMP/setup-output"
+      - name: Smoke test x64 Setup with fixture profile and CLI
+        if: matrix.architecture == 'x64'
+        shell: pwsh
+        env:
+          EXPECTED_NODE_VERSION: ${{ needs.node-version.outputs.version }}
+        run: |
+          $fixture = Join-Path $env:RUNNER_TEMP 'setup-smoke'
+          $env:ASIDE_HOME = Join-Path $fixture 'aside'
+          $env:LOCALAPPDATA = Join-Path $fixture 'localappdata'
+          $profile = Join-Path $env:ASIDE_HOME 'u/0'
+          $cli = Join-Path $env:LOCALAPPDATA 'Aside/CLI/current/aside.exe'
+          $repository = Join-Path $HOME '.local/share/aside-automation-creator'
+          if (Test-Path -LiteralPath $repository) { throw 'Smoke test refuses an existing canonical repository.' }
+          New-Item -ItemType Directory -Path $profile, (Split-Path -Parent $cli) -Force | Out-Null
+          Copy-Item -LiteralPath (Join-Path $env:WINDIR 'System32/where.exe') -Destination $cli
+          $setup = @(Get-ChildItem "$env:RUNNER_TEMP/setup-output/*-Setup.exe")
+          if ($setup.Count -ne 1) { throw 'Expected one x64 Setup executable.' }
+          $log = Join-Path $fixture 'setup.log'
+          $result = Start-Process -FilePath $setup[0].FullName -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', ('/LOG="' + $log + '"')) -Wait -PassThru
+          if ($result.ExitCode -ne 0) {
+            if (Test-Path -LiteralPath $log) { Get-Content -LiteralPath $log }
+            throw "Setup smoke test failed (exit $($result.ExitCode))."
+          }
+          foreach ($path in @((Join-Path $profile 'skills/user/aside-automation-creator/SKILL.md'), (Join-Path $repository 'engine.mjs'), (Join-Path $repository 'runtime/node.exe'))) {
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Missing installed payload: $path" }
+          }
+          $version = & (Join-Path $repository 'runtime/node.exe') --version
+          if ($LASTEXITCODE -ne 0 -or $version -ne $env:EXPECTED_NODE_VERSION) { throw 'Installed bundled Node did not execute with the expected version.' }
+          Write-Output "PASS x64 Setup smoke: fixture profile, packaged source deployment, bundled Node $version. No real browser or CLI behavior tested."
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-setup-${{ matrix.architecture }}
+          path: ${{ runner.temp }}/setup-output/*-Setup.exe
+          if-no-files-found: error
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: windows-setup-*
+          merge-multiple: true
+          path: release-assets
+      - name: Publish Setup executables and SHA256 checksums
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          $files = @(Get-ChildItem release-assets/*-Setup.exe | Sort-Object Name)
+          if ($files.Count -ne 2) { throw 'Expected x64 and arm64 Setup executables.' }
+          $lines = $files | ForEach-Object { (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant() + '  ' + $_.Name }
+          [IO.File]::WriteAllLines((Join-Path $PWD 'release-assets/SHA256SUMS.txt'), $lines, [Text.UTF8Encoding]::new($false))
+          gh release view $env:RELEASE_TAG --repo $env:GH_REPO *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $env:RELEASE_TAG --repo $env:GH_REPO --verify-tag --title $env:RELEASE_TAG --notes 'Download the Setup matching your Windows architecture. Aside must already be installed and opened once. Git and Node are not prerequisites. These community installers are unsigned, so Windows SmartScreen may warn. SHA256SUMS.txt verifies download integrity, not publisher identity.'
+            if ($LASTEXITCODE -ne 0) { throw 'Creating GitHub Release failed.' }
+          }
+          $assets = @(Get-ChildItem release-assets -File | ForEach-Object FullName)
+          gh release upload $env:RELEASE_TAG @assets --repo $env:GH_REPO --clobber
+          if ($LASTEXITCODE -ne 0) { throw 'Uploading GitHub Release assets failed.' }

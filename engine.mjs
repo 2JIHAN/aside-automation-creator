@@ -11,7 +11,7 @@ function main() {
     throw Error("사용법: node engine.mjs <account> <scenario-folder>");
   }
   const root = path.resolve(process.argv[3]);
-  const cli = path.join(os.homedir(), ".local/bin/aside");
+  const cli = process.env.ASIDE_CLI_PATH || (process.platform === "win32" ? "aside.exe" : path.join(os.homedir(), ".local/bin/aside"));
   const account = process.argv[2];
   const flow = JSON.parse(
     fs.readFileSync(path.join(root, "workflow/flow.json"), "utf8"),
