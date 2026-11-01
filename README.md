@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/readme/robot-laptop.png" width="280" alt="로봇이 Aside 로고가 표시된 노트북에서 작업하는 모습을 어깨너머로 본 아이콘">
+  <img src="assets/readme/robot-laptop-transparent.png" width="280" alt="로봇이 Aside 로고가 표시된 노트북에서 작업하는 모습을 어깨너머로 본 아이콘">
 </p>
 
 <h1 align="center">Aside Automation Creator</h1>
