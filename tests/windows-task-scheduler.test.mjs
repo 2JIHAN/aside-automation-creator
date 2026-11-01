@@ -62,6 +62,10 @@ try {
         Assert (Test-Path -LiteralPath $File -PathType Leaf) ('Uninstall removed fixture source: ' + $File)
     }
     Write-Output 'PASS real Windows Task Scheduler: interactive limited identity, future hourly trigger, IgnoreNew, named RemoteSigned launcher, safe uninstall.'
+} catch {
+    $Diagnostic = Get-ScheduledTask -TaskPath '\' -TaskName $TaskName -ErrorAction SilentlyContinue
+    if ($Diagnostic) { $Diagnostic | Select-Object TaskName, Principal, Actions | ConvertTo-Json -Depth 5 | Write-Output }
+    throw
 } finally {
     $OwnTask = Get-ScheduledTask -TaskPath '\' -TaskName $TaskName -ErrorAction SilentlyContinue
     if ($OwnTask) { Unregister-ScheduledTask -TaskPath '\' -TaskName $TaskName -Confirm:$false -ErrorAction Stop }

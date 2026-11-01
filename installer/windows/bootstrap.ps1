@@ -38,7 +38,7 @@ try {
             throw 'The official Aside CLI installer signature, publisher, or timestamp could not be verified. Nothing from the download was executed.'
         }
         $global:LASTEXITCODE = 0
-        & $Installer
+        & $Installer -InstallDirectory (Join-Path $env:LOCALAPPDATA 'Aside/CLI') -SkipPathUpdate
         if ($LASTEXITCODE -ne 0) { throw "Aside CLI installation failed (exit $LASTEXITCODE)." }
         if (-not (Test-Path -LiteralPath $Cli -PathType Leaf)) { throw "The official installer did not create $Cli" }
     }
