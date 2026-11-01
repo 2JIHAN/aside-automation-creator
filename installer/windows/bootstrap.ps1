@@ -7,6 +7,9 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
+# A Setup launched from pwsh 7 can inherit its incompatible Security module path.
+# Use this Windows PowerShell process's own built-ins; do not change user settings.
+$env:PSModulePath = Join-Path $PSHOME 'Modules'
 New-Item -ItemType Directory -Path $LogDirectory -Force | Out-Null
 $TranscriptStarted = $false
 try {
