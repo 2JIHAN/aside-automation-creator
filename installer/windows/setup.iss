@@ -33,35 +33,43 @@ CloseApplications=no
 RestartApplications=no
 SetupLogging=yes
 [Files]
-Source: "{#PayloadDir}\*"; DestDir: "{tmp}\aside-automation-creator-payload"; Flags: recursesubdirs createallsubdirs ignoreversion
-Source: "bootstrap.ps1"; DestDir: "{tmp}"; Flags: ignoreversion
+Source: "{#PayloadDir}\*"; DestDir: "{tmp}\aside-automation-creator-payload"; Flags: recursesubdirs createallsubdirs dontcopy
+Source: "bootstrap.ps1"; DestDir: "{tmp}"; Flags: dontcopy
 [Messages]
 WelcomeLabel2=This installs the automation skill and bundled Node runtime for your Windows account. Aside must already be installed and opened once.%n%nIf needed, Setup downloads and verifies the official signed Aside CLI installer. Git and Node do not need to be installed.%n%nThis community Setup is unsigned. Windows SmartScreen may display a warning. Only continue if you trust the release you downloaded.
 FinishedLabel=Installation finished. Open Aside to use aside-automation-creator. Your existing browser profiles and accounts have not been changed.
 [Code]
-procedure CurStepChanged(CurStep: TSetupStep);
+var
+  BootstrapComplete: Boolean;
+
+function PrepareToInstall(var NeedsRestart: Boolean): String;
 var
   ExitCode: Integer;
   LogDir, ErrorText, Parameters: String;
   ErrorBytes: AnsiString;
 begin
-  if CurStep = ssPostInstall then
-  begin
-    WizardForm.StatusLabel.Caption := 'Installing dependencies and the automation skill...';
-    WizardForm.ProgressGauge.Style := npbstMarquee;
-    LogDir := ExpandConstant('{localappdata}\Aside\AutomationCreator\InstallerLogs\') + GetDateTimeString('yyyymmdd-hhnnss', '-', ':');
-    ForceDirectories(LogDir);
+  Result := '';
+  if BootstrapComplete then
+    Exit;
+  LogDir := ExpandConstant('{localappdata}\Aside\AutomationCreator\InstallerLogs\') + ExtractFileName(ExpandConstant('{tmp}'));
+  try
+    if not ForceDirectories(LogDir) then
+      RaiseException('Could not create the installer diagnostic directory.');
+    DeleteFile(LogDir + '\complete.txt');
+    ExtractTemporaryFiles('*');
     Parameters := '-NoLogo -NoProfile -NonInteractive -ExecutionPolicy RemoteSigned -WindowStyle Hidden -File "' + ExpandConstant('{tmp}\bootstrap.ps1') + '" -PayloadDirectory "' + ExpandConstant('{tmp}\aside-automation-creator-payload') + '" -Architecture "{#Architecture}" -LogDirectory "' + LogDir + '"';
     if not Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'), Parameters, '', SW_HIDE, ewWaitUntilTerminated, ExitCode) then
       RaiseException('Could not start Windows PowerShell. ' + SysErrorMessage(ExitCode));
-    if ExitCode <> 0 then
+    if (ExitCode <> 0) or not FileExists(LogDir + '\complete.txt') then
     begin
-      ErrorText := 'Installation failed. No success is being reported.';
+      ErrorText := 'Installation did not confirm completion (PowerShell exit ' + IntToStr(ExitCode) + '). No success is being reported.';
       if LoadStringFromFile(LogDir + '\error.txt', ErrorBytes) then
-        ErrorText := UTF8Decode(ErrorBytes);
-      RaiseException(ErrorText + #13#10 + 'Diagnostic logs: ' + LogDir);
+        ErrorText := ErrorText + #13#10 + UTF8Decode(ErrorBytes);
+      RaiseException(ErrorText);
     end;
-    WizardForm.ProgressGauge.Style := npbstNormal;
-    WizardForm.ProgressGauge.Position := WizardForm.ProgressGauge.Max;
+    BootstrapComplete := True;
+  except
+    Result := GetExceptionMessage + #13#10 + 'Diagnostic logs: ' + LogDir;
+    Log(Result);
   end;
 end;

@@ -48,6 +48,15 @@ try {
     $global:LASTEXITCODE = 0
     & (Join-Path $PayloadDirectory 'install-to-aside.ps1') -SourceDirectory $PayloadDirectory -AsideHome $AsideHome -Repository (Join-Path $HOME '.local/share/aside-automation-creator')
     if ($LASTEXITCODE -ne 0) { throw "Skill installation failed (exit $LASTEXITCODE)." }
+    foreach ($Account in $Accounts) {
+        $InstalledSkill = Join-Path $Account.FullName 'skills/user/aside-automation-creator/SKILL.md'
+        if (-not (Test-Path -LiteralPath $InstalledSkill -PathType Leaf)) { throw ('Skill deployment was not completed: ' + $InstalledSkill) }
+    }
+    $Repository = Join-Path $HOME '.local/share/aside-automation-creator'
+    foreach ($File in @('engine.mjs', 'runtime/node.exe')) {
+        if (-not (Test-Path -LiteralPath (Join-Path $Repository $File) -PathType Leaf)) { throw ('Shared payload was not completed: ' + $File) }
+    }
+    Set-Content -LiteralPath (Join-Path $LogDirectory 'complete.txt') -Value 'complete' -Encoding ASCII
     Write-Output 'Installation complete. Open Aside to use aside-automation-creator.'
 } catch {
     $_ | Out-String | Set-Content -LiteralPath (Join-Path $LogDirectory 'error.txt') -Encoding UTF8

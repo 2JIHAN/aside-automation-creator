@@ -101,6 +101,15 @@ jobs:
           $version = & (Join-Path $repository 'runtime/node.exe') --version
           if ($LASTEXITCODE -ne 0 -or $version -ne $env:EXPECTED_NODE_VERSION) { throw 'Installed bundled Node did not execute with the expected version.' }
           Write-Output "PASS x64 Setup smoke: fixture profile, official signed CLI installation, packaged source deployment, bundled Node $version. No real browser, login, or CLI commands tested."
+      - name: Show installer diagnostics after failure
+        if: failure() && matrix.architecture == 'x64'
+        shell: pwsh
+        run: |
+          $roots = @((Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'Aside/AutomationCreator/InstallerLogs'), (Join-Path $env:RUNNER_TEMP 'setup-smoke/localappdata/Aside/AutomationCreator/InstallerLogs'))
+          $logs = @($roots | ForEach-Object { Get-ChildItem -LiteralPath $_ -Recurse -File -ErrorAction SilentlyContinue } | Where-Object { $_.Name -in @('error.txt', 'install.log') })
+          foreach ($file in $logs) { Write-Output ('--- ' + $file.FullName); Get-Content -LiteralPath $file.FullName }
+          $setupLog = Join-Path $env:RUNNER_TEMP 'setup-smoke/setup.log'
+          if (Test-Path -LiteralPath $setupLog) { Get-Content -LiteralPath $setupLog }
       - uses: actions/upload-artifact@v4
         with:
           name: windows-setup-${{ matrix.architecture }}
