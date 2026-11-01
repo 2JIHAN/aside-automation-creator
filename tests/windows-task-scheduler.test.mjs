@@ -64,7 +64,7 @@ try {
     Write-Output 'PASS real Windows Task Scheduler: interactive limited identity, future hourly trigger, IgnoreNew, named RemoteSigned launcher, safe uninstall.'
 } catch {
     $Diagnostic = Get-ScheduledTask -TaskPath '\' -TaskName $TaskName -ErrorAction SilentlyContinue
-    if ($Diagnostic) { $Diagnostic | Select-Object TaskName, Principal, Actions | ConvertTo-Json -Depth 5 | Write-Output }
+    if ($Diagnostic) { [pscustomobject]@{ UserId=$Diagnostic.Principal.UserId; LogonType=[string]$Diagnostic.Principal.LogonType; RunLevel=[string]$Diagnostic.Principal.RunLevel; Execute=$Diagnostic.Actions[0].Execute; WorkingDirectory=$Diagnostic.Actions[0].WorkingDirectory } | ConvertTo-Json | Write-Output }
     throw
 } finally {
     $OwnTask = Get-ScheduledTask -TaskPath '\' -TaskName $TaskName -ErrorAction SilentlyContinue

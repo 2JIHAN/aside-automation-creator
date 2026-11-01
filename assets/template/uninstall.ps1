@@ -22,10 +22,14 @@ if ($BackgroundItem -and (-not $BackgroundItem.PSIsContainer -or ($BackgroundIte
 function Assert-OwnedTask($Task) {
     if ($Task.Description -cne $Description -or @($Task.Actions).Count -ne 1) { throw 'Refusing an unrelated scheduled task.' }
     $Action = @($Task.Actions)[0]
-    # Task Scheduler may persist the same user as a SID instead of DOMAIN\user.
+    # Task Scheduler may persist DOMAIN\user as a local name, UPN, or SID.
     $IsCurrentUser = $Task.Principal.UserId -ieq $UserId
-    if (-not $IsCurrentUser -and $Task.Principal.UserId -match '^S-1-') {
-        $IsCurrentUser = $Task.Principal.UserId -eq [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+    if (-not $IsCurrentUser) {
+        try {
+            $TaskSid = $Task.Principal.UserId
+            if ($TaskSid -notmatch '^S-1-') { $TaskSid = (New-Object Security.Principal.NTAccount($TaskSid)).Translate([Security.Principal.SecurityIdentifier]).Value }
+            $IsCurrentUser = $TaskSid -eq [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+        } catch { $IsCurrentUser = $false }
     }
     if ($Action.Execute -ine $PowerShell -or $Action.WorkingDirectory -ine $Dir -or
         -not $IsCurrentUser -or $Task.Principal.LogonType -ne 'Interactive' -or
