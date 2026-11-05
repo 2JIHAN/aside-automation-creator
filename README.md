@@ -13,10 +13,12 @@ Aside에서 반복할 업무를 가르치고, 같은 순서로 다시 실행하�
 | 운영체제 | 파일 | CPU |
 | --- | --- | --- |
 | macOS 13.5 이상 | [DMG 다운로드](https://github.com/2JIHAN/aside-automation-creator/releases/latest) | Apple Silicon과 Intel 공용 |
-| Windows | [x64 Setup 다운로드](https://github.com/2JIHAN/aside-automation-creator/releases/latest) | Intel 또는 AMD |
-| Windows | [ARM64 Setup 다운로드](https://github.com/2JIHAN/aside-automation-creator/releases/latest) | Windows ARM |
+| Windows | [x64 Setup 다운로드](https://github.com/2JIHAN/aside-automation-creator/releases/tag/v0.2.2) | Intel 또는 AMD |
+| Windows | [ARM64 Setup 다운로드](https://github.com/2JIHAN/aside-automation-creator/releases/tag/v0.2.2) | Windows ARM |
 
-설치가 끝나면 Aside에서 새 채팅을 엽니다.
+macOS에서는 DMG 안의 앱을 열고 **앱 설치**를 누릅니다. 앱은 `~/Applications/Aside Automation Creator.app`에 설치되고 메뉴 막대에서 실행됩니다. 로그인 시 실행과 매일 자동 업데이트 확인이 기본으로 켜집니다. 새 버전이 있으면 메뉴에 **업데이트 있음**이 표시되며, 눌러서 변경 내용을 확인하고 설치할 수 있습니다. **자동 다운로드 및 설치**는 메뉴에서 선택할 수 있고 기본값은 꺼짐입니다.
+
+업데이트는 공용 엔진과 모든 로컬 프로필의 제작 스킬을 갱신합니다. 기존 업무 지침과 실행 기록, 예약 설정은 바꾸지 않습니다. 설치가 끝나면 Aside에서 새 채팅을 엽니다.
 
 * Windows에서는 미서명 Setup에 SmartScreen 경고가 표시될 수 있습니다.
 

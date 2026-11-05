@@ -160,6 +160,11 @@ jobs:
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
+          $existingDraft = gh release view $env:RELEASE_TAG --repo $env:GH_REPO --json isDraft --jq .isDraft 2>$null
+          if ($LASTEXITCODE -eq 0 -and $existingDraft -eq 'false') {
+            Write-Output 'Published release assets are immutable; do not replace the signed macOS app with CI output.'
+            exit 0
+          }
           $files = @(Get-ChildItem release-assets -File | Where-Object { $_.Name -like '*-Setup.exe' -or $_.Name -like '*-Setup.dmg' } | Sort-Object Name)
           if ($files.Count -ne 3) { throw 'Expected Windows x64, Windows arm64 and universal macOS installers.' }
           $lines = $files | ForEach-Object { (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant() + '  ' + $_.Name }

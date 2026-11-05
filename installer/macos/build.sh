@@ -10,11 +10,24 @@ mkdir -p "$OUT"
 OUT=$(cd "$OUT" && pwd -P)
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/aac-macos-build.XXXXXX")
 trap 'rm -rf "$WORK"' EXIT
-APP="$WORK/image/Aside Automation Creator 설치.app"
+APP="$WORK/image/Aside Automation Creator.app"
 RES="$APP/Contents/Resources"
 mkdir -p "$APP/Contents/MacOS" "$RES/payload" "$RES/cli" "$RES/runtime" "$WORK/icon.iconset"
 for item in SKILL.md engine.mjs README.md install-to-aside.sh assets; do /bin/cp -R "$ROOT/$item" "$RES/payload/"; done
-/bin/cp "$ROOT/installer/macos/bootstrap.sh" "$RES/"
+/bin/cp "$ROOT/installer/macos/bootstrap.sh" "$ROOT/installer/macos/adopt-app.sh" "$RES/"
+SPARKLE_VERSION=2.10.1
+SPARKLE_SHA256=1a856d2a9edb8e628de88121d7be04cf0e2167f8641650b78fca00b14244cf27
+SPARKLE_DIR=${SPARKLE_DISTRIBUTION_DIR:-"$WORK/sparkle"}
+if [ -z "${SPARKLE_DISTRIBUTION_DIR:-}" ]; then
+  mkdir -p "$SPARKLE_DIR"
+  curl --proto '=https' --tlsv1.2 -fsSL "https://github.com/sparkle-project/Sparkle/releases/download/$SPARKLE_VERSION/Sparkle-$SPARKLE_VERSION.tar.xz" -o "$WORK/sparkle.tar.xz"
+  [ "$(shasum -a 256 "$WORK/sparkle.tar.xz" | awk '{print $1}')" = "$SPARKLE_SHA256" ] || { echo 'Sparkle checksum mismatch' >&2; exit 1; }
+  tar -xf "$WORK/sparkle.tar.xz" -C "$SPARKLE_DIR"
+fi
+/usr/bin/codesign --verify --deep --strict "$SPARKLE_DIR/Sparkle.framework"
+mkdir -p "$APP/Contents/Frameworks"
+/usr/bin/ditto "$SPARKLE_DIR/Sparkle.framework" "$APP/Contents/Frameworks/Sparkle.framework"
+PUBLIC_KEY=$(cat "$ROOT/installer/macos/sparkle-public-key.txt")
 NODE_VERSION=v26.13.0
 curl --proto '=https' --tlsv1.2 -fsSL "https://nodejs.org/dist/$NODE_VERSION/SHASUMS256.txt" -o "$WORK/SHASUMS256.txt"
 for arch in arm64 x64; do
@@ -36,6 +49,8 @@ for arch in arm64 x64; do
   /usr/sbin/spctl --assess --type execute "$WORK/cli-$arch/Aside CLI.app"
   shasum -a 256 "$RES/cli/$arch.zip" | sed "s|$RES/cli/||" >> "$RES/cli-sha256.txt"
 done
+(cd "$RES"; find payload runtime -type f | LC_ALL=C sort | while IFS= read -r file; do shasum -a 256 "$file"; done) > "$RES/payload-manifest.txt"
+shasum -a 256 "$RES/payload-manifest.txt" | awk '{print $1}' > "$RES/payload-fingerprint.txt"
 for size in 16 32 128 256 512; do
   /usr/bin/sips -z "$size" "$size" "$ROOT/assets/readme/robot-laptop-transparent.png" --out "$WORK/icon.iconset/icon_${size}x${size}.png" >/dev/null
   double=$((size * 2))
@@ -47,20 +62,37 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
 <key>CFBundleExecutable</key><string>Installer</string>
-<key>CFBundleIdentifier</key><string>com.tamcut.aside-automation-creator.installer</string>
-<key>CFBundleName</key><string>Aside Automation Creator 설치</string>
+<key>CFBundleIdentifier</key><string>com.tamcut.aside-automation-creator</string>
+<key>CFBundleName</key><string>Aside Automation Creator</string>
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>CFBundleShortVersionString</key><string>$VERSION</string>
 <key>CFBundleVersion</key><string>$VERSION</string>
 <key>CFBundleIconFile</key><string>Installer</string>
 <key>LSMinimumSystemVersion</key><string>13.5</string>
 <key>NSHighResolutionCapable</key><true/>
+<key>LSUIElement</key><true/>
+<key>SUFeedURL</key><string>https://raw.githubusercontent.com/2JIHAN/aside-automation-creator/main/installer/macos/appcast.xml</string>
+<key>SUPublicEDKey</key><string>$PUBLIC_KEY</string>
+<key>SUEnableAutomaticChecks</key><true/>
+<key>SUAutomaticallyUpdate</key><false/>
+<key>SUScheduledCheckInterval</key><integer>86400</integer>
+<key>SUEnableSystemProfiling</key><false/>
+<key>SUVerifyUpdateBeforeExtraction</key><true/>
 </dict></plist>
 PLIST
 for target in arm64 x86_64; do
-  xcrun swiftc -swift-version 5 -O -target "$target-apple-macosx13.5" -framework AppKit "$ROOT/installer/macos/Installer.swift" -o "$WORK/Installer-$target"
+  xcrun swiftc -swift-version 5 -O -target "$target-apple-macosx13.5" -framework AppKit -framework ServiceManagement -F "$SPARKLE_DIR" -framework Sparkle -Xlinker -rpath -Xlinker @executable_path/../Frameworks "$ROOT/installer/macos/PayloadState.swift" "$ROOT/installer/macos/Installer.swift" -o "$WORK/Installer-$target"
 done
 /usr/bin/lipo -create "$WORK/Installer-arm64" "$WORK/Installer-x86_64" -output "$APP/Contents/MacOS/Installer"
+SPARKLE_FRAMEWORK="$APP/Contents/Frameworks/Sparkle.framework/Versions/B"
+SIGN_ID=${CODE_SIGN_IDENTITY:--}
+for component in "$SPARKLE_FRAMEWORK/Autoupdate" "$SPARKLE_FRAMEWORK/Updater.app" "$SPARKLE_FRAMEWORK/XPCServices/Downloader.xpc" "$SPARKLE_FRAMEWORK/XPCServices/Installer.xpc" "$APP/Contents/Frameworks/Sparkle.framework"; do
+  if [ "$SIGN_ID" = - ]; then
+    /usr/bin/codesign --force --sign - "$component"
+  else
+    /usr/bin/codesign --force --options runtime --timestamp --sign "$SIGN_ID" "$component"
+  fi
+done
 if [ -n "${CODE_SIGN_IDENTITY:-}" ]; then
   /usr/bin/codesign --force --options runtime --timestamp --sign "$CODE_SIGN_IDENTITY" "$APP"
 else
@@ -70,8 +102,9 @@ fi
 /usr/bin/codesign --verify --deep --strict "$APP"
 # Never use --deep to sign: preserve the Node vendor signatures.
 for arch in arm64 x64; do /usr/bin/codesign --verify --strict -R='anchor apple generic and certificate leaf[subject.OU] = "HX7739G8FX"' "$RES/runtime/$arch/node"; done
-/usr/bin/ditto "$APP" "$OUT/Aside Automation Creator 설치.app"
+/usr/bin/ditto "$APP" "$OUT/Aside Automation Creator.app"
 DMG="$OUT/AsideAutomationCreator-$VERSION-macOS-Setup.dmg"
-/usr/bin/hdiutil create -volname 'Aside Automation Creator 설치' -srcfolder "$WORK/image" -format UDZO -ov "$DMG" >/dev/null
+/usr/bin/hdiutil create -volname 'Aside Automation Creator' -srcfolder "$WORK/image" -format UDZO -ov "$DMG" >/dev/null
+/usr/bin/ditto -c -k --keepParent "$APP" "$OUT/AsideAutomationCreator-$VERSION-macOS.zip"
 shasum -a 256 "$DMG" > "$DMG.sha256"
 printf 'Built %s\nNotarization is a separate release gate.\n' "$DMG"
