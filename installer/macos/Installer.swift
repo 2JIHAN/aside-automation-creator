@@ -9,6 +9,9 @@ final class Installer: NSObject, NSApplicationDelegate, SPUUpdaterDelegate, SPUS
     let progress = NSProgressIndicator()
     let log = NSTextView()
     let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+    let showMenuOption = NSButton(checkboxWithTitle: "메뉴 막대에 표시", target: nil, action: nil)
+    let automaticUpdateOption = NSButton(checkboxWithTitle: "자동 다운로드 및 설치", target: nil, action: nil)
+    var launchUpdateCheck = LaunchUpdateCheck()
     let fixture = ProcessInfo.processInfo.environment["AAC_INSTALLER_FIXTURE"] == "1"
     let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "0.0.0"
     var phase = AppPhase.needsInstall
@@ -28,6 +31,7 @@ final class Installer: NSObject, NSApplicationDelegate, SPUUpdaterDelegate, SPUS
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        UserDefaults.standard.register(defaults: ["AACShowMenuBarIcon": true])
         window.title = "Aside Automation Creator"
         window.isReleasedWhenClosed = false
         window.center()
@@ -55,6 +59,14 @@ final class Installer: NSObject, NSApplicationDelegate, SPUUpdaterDelegate, SPUS
         button.target = self
         button.action = #selector(install)
         content.addSubview(button)
+        showMenuOption.frame = NSRect(x: 24, y: 50, width: 210, height: 24)
+        showMenuOption.target = self
+        showMenuOption.action = #selector(toggleMenuVisibility)
+        content.addSubview(showMenuOption)
+        automaticUpdateOption.frame = NSRect(x: 24, y: 22, width: 260, height: 24)
+        automaticUpdateOption.target = self
+        automaticUpdateOption.action = #selector(toggleDownloads)
+        content.addSubview(automaticUpdateOption)
         refresh()
         if CommandLine.arguments.contains("--smoke-test") && !fixture { NSApp.terminate(nil); return }
         if fixture { applyPayload(); return }
@@ -93,6 +105,10 @@ final class Installer: NSObject, NSApplicationDelegate, SPUUpdaterDelegate, SPUS
         statusItem.button?.image = NSImage(systemSymbolName: updateAvailable ? "arrow.down.circle.fill" : "gearshape", accessibilityDescription: updateAvailable ? "업데이트 있음" : "Aside Automation Creator")
         statusItem.button?.title = updateAvailable ? " 업데이트 있음" : ""
         statusItem.button?.toolTip = text
+        statusItem.isVisible = UserDefaults.standard.bool(forKey: "AACShowMenuBarIcon")
+        showMenuOption.state = statusItem.isVisible ? .on : .off
+        automaticUpdateOption.state = controller?.updater.automaticallyDownloadsUpdates == true ? .on : .off
+        automaticUpdateOption.isEnabled = controller != nil
         let menu = NSMenu()
         menu.autoenablesItems = false
         func add(_ title: String, _ action: Selector?, enabled: Bool = true, checked: Bool = false) {
@@ -111,7 +127,8 @@ final class Installer: NSObject, NSApplicationDelegate, SPUUpdaterDelegate, SPUS
         add("로그인 시 실행", #selector(toggleLogin), enabled: !fixture && isCanonical && phase == .ready, checked: !fixture && SMAppService.mainApp.status == .enabled)
         menu.addItem(.separator())
         add(isCanonical ? "엔진과 스킬 다시 확인 / 복구" : "앱 설치 / 기존 앱 열기", #selector(install), enabled: !applying && !adopting)
-        add("설치 기록 보기", #selector(showLog))
+        add("메뉴 막대에 표시", #selector(toggleMenuVisibility), checked: statusItem.isVisible)
+        add("설정과 설치 기록 보기", #selector(showLog))
         add("종료", #selector(quit), enabled: !applying && !adopting)
         statusItem.menu = menu
     }
@@ -217,11 +234,14 @@ final class Installer: NSObject, NSApplicationDelegate, SPUUpdaterDelegate, SPUS
     func becameReady() {
         if !fixture && isCanonical {
             if controller == nil {
-                UserDefaults.standard.register(defaults: ["SUEnableAutomaticChecks": true, "SUAutomaticallyUpdate": false])
+                UserDefaults.standard.register(defaults: ["SUEnableAutomaticChecks": true, "SUAutomaticallyUpdate": true])
                 controller = SPUStandardUpdaterController(startingUpdater: false, updaterDelegate: self, userDriverDelegate: self)
                 controller?.updater.automaticallyChecksForUpdates = UserDefaults.standard.bool(forKey: "SUEnableAutomaticChecks")
                 controller?.updater.automaticallyDownloadsUpdates = UserDefaults.standard.bool(forKey: "SUAutomaticallyUpdate")
                 controller?.startUpdater()
+                if controller?.updater.automaticallyChecksForUpdates == true, launchUpdateCheck.begin() {
+                    controller?.updater.checkForUpdateInformation()
+                }
             }
             if !UserDefaults.standard.bool(forKey: "AACLoginRegistrationAttempted") {
                 UserDefaults.standard.set(true, forKey: "AACLoginRegistrationAttempted")
@@ -241,6 +261,10 @@ final class Installer: NSObject, NSApplicationDelegate, SPUUpdaterDelegate, SPUS
     }
 
     @objc func checkUpdates() { guard !applying else { return }; controller?.checkForUpdates(nil) }
+    @objc func toggleMenuVisibility() {
+        UserDefaults.standard.set(!UserDefaults.standard.bool(forKey: "AACShowMenuBarIcon"), forKey: "AACShowMenuBarIcon")
+        refresh()
+    }
     @objc func toggleChecks() {
         guard let updater = controller?.updater else { return }
         updater.automaticallyChecksForUpdates.toggle()
@@ -260,6 +284,21 @@ final class Installer: NSObject, NSApplicationDelegate, SPUUpdaterDelegate, SPUS
             UserDefaults.standard.set(true, forKey: "AACLoginRegistrationAttempted")
             refresh()
         } catch { log.textStorage?.append(NSAttributedString(string: "\n로그인 시 실행 설정 실패: \(error.localizedDescription)\n")); showLog() }
+    }
+
+    func updater(_ updater: SPUUpdater, didFindValidUpdate item: SUAppcastItem) {
+        launchUpdateCheck.foundUpdate()
+    }
+    func updater(_ updater: SPUUpdater, didFinishUpdateCycleFor updateCheck: SPUUpdateCheck, error: Error?) {
+        guard updateCheck == .updateInformation else { refresh(); return }
+        let recommend = launchUpdateCheck.finish(failed: error != nil)
+        refresh()
+        if recommend {
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.phase == .ready, !self.adopting else { return }
+                self.controller?.checkForUpdates(nil)
+            }
+        }
     }
 
     var supportsGentleScheduledUpdateReminders: Bool { true }

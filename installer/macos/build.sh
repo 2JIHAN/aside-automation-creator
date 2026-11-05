@@ -75,7 +75,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <key>SUFeedURL</key><string>https://raw.githubusercontent.com/2JIHAN/aside-automation-creator/main/installer/macos/appcast.xml</string>
 <key>SUPublicEDKey</key><string>$PUBLIC_KEY</string>
 <key>SUEnableAutomaticChecks</key><true/>
-<key>SUAutomaticallyUpdate</key><false/>
+<key>SUAutomaticallyUpdate</key><true/>
 <key>SUScheduledCheckInterval</key><integer>86400</integer>
 <key>SUEnableSystemProfiling</key><false/>
 <key>SUVerifyUpdateBeforeExtraction</key><true/>

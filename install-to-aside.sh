@@ -1,6 +1,14 @@
 #!/bin/bash
 set -euo pipefail
 
+# EXIT runs after main's locals have gone out of scope.
+package_active=0
+package_temp=''
+transaction_dest=()
+transaction_backup=()
+transaction_inode=()
+transaction_dirs=()
+
 fail() { printf '설치 중단: %s\n' "$*" >&2; exit 1; }
 
 clear_one() {
@@ -28,6 +36,7 @@ ensure_dir() {
   if [ ! -d "$1" ]; then
     ensure_dir "$(dirname "$1")"
     mkdir "$1"
+    if [ "$package_active" -eq 1 ]; then transaction_dirs+=("$1"); fi
     clear_one "$1"
   fi
 }
@@ -63,12 +72,65 @@ check_package_parent() {
   done
 }
 
+file_inode() {
+  if [ "$(uname -s)" = Darwin ]; then /usr/bin/stat -f '%d:%i' "$1"; else stat -c '%d:%i' "$1"; fi
+}
+
+same_file() {
+  [ ! -L "$2" ] && [ -f "$2" ] && cmp -s "$1" "$2" && [ "$(file_mode "$1")" = "$(file_mode "$2")" ]
+}
+
+rollback_package() {
+  local i dest backup prepared failed=0
+  for ((i=${#transaction_dest[@]}-1; i>=0; i--)); do
+    dest="${transaction_dest[i]}"; backup="${transaction_backup[i]}"
+    if ! (check_package_parent "$(dirname "$dest")"); then failed=1; continue; fi
+    if [ -n "$backup" ]; then
+      if same_file "$backup" "$dest"; then continue; fi
+      if [ -L "$dest" ] || { [ -e "$dest" ] && [ ! -f "$dest" ]; }; then failed=1; continue; fi
+      prepared=$(mktemp "$(dirname "$dest")/.automation-creator-file.XXXXXX") || { failed=1; continue; }
+      if ! cp -p "$backup" "$prepared" || ! (clear_one "$prepared") || ! mv -f "$prepared" "$dest" || ! same_file "$backup" "$dest"; then
+        failed=1
+      fi
+      rm -f -- "$prepared" || failed=1
+    elif [ -e "$dest" ] || [ -L "$dest" ]; then
+      if [ ! -L "$dest" ] && [ -f "$dest" ] && [ "$(file_inode "$dest")" = "${transaction_inode[i]}" ]; then
+        rm -f -- "$dest" || failed=1
+      else
+        failed=1
+      fi
+    fi
+  done
+  for ((i=${#transaction_dirs[@]}-1; i>=0; i--)); do
+    dest="${transaction_dirs[i]}"
+    if ! (check_package_parent "$dest"); then failed=1; continue; fi
+    if [ -d "$dest" ]; then rmdir "$dest" 2>/dev/null || :; fi
+  done
+  [ "$failed" -eq 0 ]
+}
+
+cleanup() {
+  local status=$?
+  trap - EXIT
+  set +e
+  if [ -n "$package_temp" ]; then rm -f -- "$package_temp" || status=1; fi
+  if [ "$package_active" -eq 1 ]; then
+    [ "$status" -ne 0 ] || status=1
+    if ! rollback_package; then
+      printf '설치 복원 실패. 복구 파일을 보존했습니다: %s\n' "$WORKDIR" >&2
+      exit 1
+    fi
+  fi
+  rm -rf -- "$WORKDIR" || status=1
+  exit "$status"
+}
+
 package_file() {
-  local source="$1" dest="$2" backup="$3" prepared
+  local source="$1" dest="$2" prepared backup='' index
   check_package_parent "$(dirname "$dest")"
   [ ! -L "$dest" ] || fail "설치 파일이 심볼릭 링크입니다: $dest"
   [ ! -e "$dest" ] || [ -f "$dest" ] || fail "설치 파일 경로가 일반 파일이 아닙니다: $dest"
-  if [ -f "$dest" ] && cmp -s "$source" "$dest" && [ "$(file_mode "$source")" = "$(file_mode "$dest")" ]; then
+  if same_file "$source" "$dest"; then
     package_skipped=$((package_skipped + 1))
     return
   fi
@@ -77,21 +139,26 @@ package_file() {
   package_temp="$prepared"
   cp -p "$source" "$prepared"
   clear_one "$prepared"
+  same_file "$source" "$prepared" || fail "설치 파일 준비 검증 실패: $dest"
+  index=${#transaction_dest[@]}
   if [ -f "$dest" ]; then
-    check_package_parent "$(dirname "$backup")"
-    ensure_dir "$(dirname "$backup")"
-    [ ! -e "$backup" ] && [ ! -L "$backup" ] || fail "백업 경로가 이미 있습니다: $backup"
+    backup="$WORKDIR/rollback-$index"
     cp -p "$dest" "$backup"
     clear_one "$backup"
-    printf '  이전 파일 백업: %s\n' "$backup"
+    same_file "$dest" "$backup" || fail "복원 파일 검증 실패: $dest"
   fi
-  if ! mv -f "$prepared" "$dest"; then fail "파일 배치 실패. 기존 파일을 유지했습니다: $dest"; fi
+  transaction_dest+=("$dest")
+  transaction_backup+=("$backup")
+  transaction_inode+=("$(file_inode "$prepared")")
+  if ! mv -f "$prepared" "$dest"; then fail "파일 배치 실패. 기존 파일을 복원합니다: $dest"; fi
+  same_file "$source" "$dest" || fail "파일 배치 검증 실패. 기존 파일을 복원합니다: $dest"
+  [ ! -e "$prepared" ] || rm -f -- "$prepared"
   package_temp=''
   package_updated=$((package_updated + 1))
 }
 
 package_tree() {
-  local source="$1" dest="$2" backup="$3" file relative
+  local source="$1" dest="$2" file relative
   check_package_parent "$dest"
   ensure_dir "$dest"
   while IFS= read -r -d '' file; do
@@ -101,7 +168,7 @@ package_tree() {
   done < <(find "$source" -mindepth 1 -type d -print0)
   while IFS= read -r -d '' file; do
     relative=${file#"$source"/}
-    package_file "$file" "$dest/$relative" "$backup/$relative"
+    package_file "$file" "$dest/$relative"
   done < <(find "$source" -type f -print0)
 }
 
@@ -154,10 +221,11 @@ main() {
     fi
     parent=$(dirname "$parent")
   done
-  ensure_dir "$(dirname "$REPO")"
   WORKDIR=$(mktemp -d "$ASIDE_HOME/.automation-creator-install.XXXXXX")
   package_temp=''
-  trap 'if [ -n "$package_temp" ]; then rm -f -- "$package_temp"; fi; rm -rf -- "$WORKDIR"' EXIT
+  trap cleanup EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
   clear_one "$WORKDIR"
   touch "$WORKDIR/start"
   clear_one "$WORKDIR/start"
@@ -166,7 +234,6 @@ main() {
     local migration=0 package_updated=0 package_skipped=0 repo_backup='' file
     local stamp="$(date +%Y%m%d-%H%M%S)-$$"
     local shared_backup="$REPO.backup-$stamp"
-    local backup_root="$ASIDE_HOME/skill-backups/aside-automation-creator/$stamp"
     if [ -e "$REPO" ]; then
       if [ -f "$REPO/.aside-automation-creator-package" ] && [ ! -L "$REPO/.aside-automation-creator-package" ] && grep -Fxq "$URL" "$REPO/.aside-automation-creator-package"; then
         :
@@ -180,19 +247,20 @@ main() {
         fail "다른 폴더 또는 원본 저장소 주소가 다른 폴더를 덮어쓰지 않습니다: $REPO"
       fi
     fi
+    package_active=1
     local target="$REPO"
     if [ "$migration" -eq 1 ]; then target="$WORKDIR/repository"; fi
     check_package_parent "$target"
     ensure_dir "$target"
     for file in SKILL.md engine.mjs README.md install-to-aside.sh; do
-      package_file "$source_directory/$file" "$target/$file" "$shared_backup/$file"
+      package_file "$source_directory/$file" "$target/$file"
     done
     for file in assets runtime; do
-      package_tree "$source_directory/$file" "$target/$file" "$shared_backup/$file"
+      package_tree "$source_directory/$file" "$target/$file"
     done
     printf '%s\n' "$URL" > "$WORKDIR/package-marker"
     clear_one "$WORKDIR/package-marker"
-    package_file "$WORKDIR/package-marker" "$target/.aside-automation-creator-package" "$shared_backup/.aside-automation-creator-package"
+    package_file "$WORKDIR/package-marker" "$target/.aside-automation-creator-package"
     if [ "$migration" -eq 1 ]; then
       repo_backup="$shared_backup"
       [ ! -e "$repo_backup" ] && [ ! -L "$repo_backup" ] || fail "백업 경로가 이미 있습니다: $repo_backup"
@@ -201,6 +269,8 @@ main() {
         if [ ! -e "$REPO" ] && [ ! -L "$REPO" ]; then mv "$repo_backup" "$REPO"; fi
         fail '새 저장소 배치 실패. 기존 저장소를 복원했습니다.'
       fi
+      # Migration retains its whole Git-source backup, independently of profile updates.
+      transaction_dest=(); transaction_backup=(); transaction_inode=(); transaction_dirs=()
       printf '기존 패키지 저장소 백업: %s\n' "$repo_backup"
     fi
     printf '공용 파일: 업데이트 %s개, 건너뜀 %s개.\n' "$package_updated" "$package_skipped"
@@ -211,15 +281,11 @@ main() {
       dest="$account/skills/user/aside-automation-creator"
       check_package_parent "$(dirname "$dest")"
       if [ -L "$dest" ] || { [ -e "$dest" ] && [ ! -d "$dest" ]; }; then
-        check_package_parent "$backup_root"
-        ensure_dir "$backup_root"
-        mv "$dest" "$backup_root/u$number"
-        clear_one "$backup_root/u$number"
-        printf '  이전 버전 백업: %s\n' "$backup_root/u$number"
+        fail "스킬 경로가 폴더가 아니거나 심볼릭 링크입니다: $dest"
       fi
       before=$package_updated
-      package_file "$source_directory/SKILL.md" "$dest/SKILL.md" "$backup_root/u$number/SKILL.md"
-      package_tree "$source_directory/assets/template" "$dest/assets/template" "$backup_root/u$number/assets/template"
+      package_file "$source_directory/SKILL.md" "$dest/SKILL.md"
+      package_tree "$source_directory/assets/template" "$dest/assets/template"
       if [ "$package_updated" -eq "$before" ]; then
         printf 'u%s: 이미 최신입니다.\n' "$number"
         unchanged=$((unchanged + 1))
@@ -229,6 +295,7 @@ main() {
       fi
     done
     printf '프로필 파일: 업데이트 %s개, 건너뜀 %s개.\n' "$package_updated" "$package_skipped"
+    package_active=0
     printf '\n완료: 설치/업데이트 %s개, 이미 최신 %s개. 새 Aside 채팅에서 사용하세요.\n' "$installed" "$unchanged"
     printf '공용 소스: %s\n' "$REPO"
     return
@@ -253,6 +320,7 @@ main() {
       git -C "$REPO" pull --ff-only
     fi
   else
+    ensure_dir "$(dirname "$REPO")"
     git clone --branch main --single-branch "$URL" "$REPO"
   fi
   # 이번 Git 작업이 생성하거나 수정한 항목만 정리한다.

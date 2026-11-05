@@ -83,3 +83,19 @@ enum PayloadState {
         NSError(domain: "AsideAutomationCreator", code: 1, userInfo: [NSLocalizedDescriptionKey: message])
     }
 }
+
+struct LaunchUpdateCheck {
+    enum State { case idle, checking, updateFound, finished }
+    private(set) var state = State.idle
+    mutating func begin() -> Bool {
+        guard state == .idle else { return false }
+        state = .checking
+        return true
+    }
+    mutating func foundUpdate() { if state == .checking { state = .updateFound } }
+    mutating func finish(failed: Bool) -> Bool {
+        let recommend = state == .updateFound && !failed
+        state = .finished
+        return recommend
+    }
+}
