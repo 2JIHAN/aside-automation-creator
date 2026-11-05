@@ -3,15 +3,19 @@ import ServiceManagement
 import Sparkle
 
 final class Installer: NSObject, NSApplicationDelegate, SPUUpdaterDelegate, SPUStandardUserDriverDelegate {
-    let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 430), styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false)
+    let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 520, height: 390), styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false)
     let button = NSButton(title: "설치", target: nil, action: nil)
     let status = NSTextField(labelWithString: "현재 사용자의 Aside 프로필에 설치합니다.")
     let progress = NSProgressIndicator()
     let log = NSTextView()
+    var logWindow: NSWindow?
+    let stateIcon = NSImageView()
+    let loginOption = NSButton(checkboxWithTitle: "로그인 시 실행", target: nil, action: nil)
     let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     let showMenuOption = NSButton(checkboxWithTitle: "메뉴 막대에 표시", target: nil, action: nil)
     let automaticUpdateOption = NSButton(checkboxWithTitle: "자동 다운로드 및 설치", target: nil, action: nil)
     var launchUpdateCheck = LaunchUpdateCheck()
+    var updateReadinessObservation: NSKeyValueObservation?
     let fixture = ProcessInfo.processInfo.environment["AAC_INSTALLER_FIXTURE"] == "1"
     let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "0.0.0"
     var phase = AppPhase.needsInstall
@@ -36,43 +40,78 @@ final class Installer: NSObject, NSApplicationDelegate, SPUUpdaterDelegate, SPUS
         window.isReleasedWhenClosed = false
         window.center()
         let content = window.contentView!
+        let icon = NSImageView(frame: NSRect(x: 24, y: 326, width: 40, height: 40))
+        icon.image = NSApp.applicationIconImage
+        content.addSubview(icon)
         let heading = NSTextField(labelWithString: "Aside Automation Creator")
-        heading.font = .boldSystemFont(ofSize: 23)
-        heading.frame = NSRect(x: 24, y: 365, width: 550, height: 34)
+        heading.font = .systemFont(ofSize: 18, weight: .semibold)
+        heading.frame = NSRect(x: 76, y: 344, width: 420, height: 24)
         content.addSubview(heading)
-        status.frame = NSRect(x: 24, y: 315, width: 550, height: 45)
-        status.maximumNumberOfLines = 2
+        let caption = NSTextField(labelWithString: "버전 \(version)")
+        caption.font = .systemFont(ofSize: 12)
+        caption.textColor = .secondaryLabelColor
+        caption.frame = NSRect(x: 76, y: 326, width: 420, height: 18)
+        content.addSubview(caption)
+        for frame in [NSRect(x: 24, y: 264, width: 472, height: 52), NSRect(x: 24, y: 96, width: 472, height: 152)] {
+            let box = NSBox(frame: frame)
+            box.boxType = .custom
+            box.title = ""
+            box.titlePosition = .noTitle
+            box.borderColor = .separatorColor
+            box.fillColor = .controlBackgroundColor
+            box.cornerRadius = 10
+            content.addSubview(box)
+        }
+        stateIcon.frame = NSRect(x: 40, y: 282, width: 16, height: 16)
+        content.addSubview(stateIcon)
+        status.font = .systemFont(ofSize: 13, weight: .medium)
+        status.frame = NSRect(x: 66, y: 280, width: 256, height: 20)
+        status.lineBreakMode = .byTruncatingTail
         content.addSubview(status)
-        progress.frame = NSRect(x: 24, y: 295, width: 552, height: 12)
-        progress.style = .bar
+        progress.frame = stateIcon.frame
+        progress.style = .spinning
+        progress.controlSize = .small
         progress.isIndeterminate = true
+        progress.isDisplayedWhenStopped = false
+        progress.isHidden = true
         content.addSubview(progress)
-        let scroll = NSScrollView(frame: NSRect(x: 24, y: 82, width: 552, height: 195))
-        scroll.hasVerticalScroller = true
-        log.isEditable = false
-        log.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
-        log.autoresizingMask = [.width]
-        scroll.documentView = log
-        content.addSubview(scroll)
-        button.frame = NSRect(x: 416, y: 24, width: 160, height: 34)
+        button.frame = NSRect(x: 330, y: 275, width: 154, height: 32)
         button.bezelStyle = .rounded
         button.target = self
-        button.action = #selector(install)
         content.addSubview(button)
-        showMenuOption.frame = NSRect(x: 24, y: 50, width: 210, height: 24)
-        showMenuOption.target = self
-        showMenuOption.action = #selector(toggleMenuVisibility)
-        content.addSubview(showMenuOption)
-        automaticUpdateOption.frame = NSRect(x: 24, y: 22, width: 260, height: 24)
-        automaticUpdateOption.target = self
-        automaticUpdateOption.action = #selector(toggleDownloads)
-        content.addSubview(automaticUpdateOption)
+        let rows: [(NSButton, CGFloat, String, Selector)] = [
+            (automaticUpdateOption, 216, "새 버전을 자동으로 다운로드하고 설치합니다.", #selector(toggleDownloads)),
+            (loginOption, 169, "Mac에 로그인하면 백그라운드에서 실행합니다.", #selector(toggleLogin)),
+            (showMenuOption, 122, "메뉴 막대에서 상태와 설정에 빠르게 접근합니다.", #selector(toggleMenuVisibility))
+        ]
+        for (option, y, subtitle, action) in rows {
+            option.font = .systemFont(ofSize: 13)
+            option.frame = NSRect(x: 40, y: y, width: 436, height: 22)
+            option.target = self
+            option.action = action
+            content.addSubview(option)
+            let detail = NSTextField(labelWithString: subtitle)
+            detail.font = .systemFont(ofSize: 11)
+            detail.textColor = .secondaryLabelColor
+            detail.frame = NSRect(x: 60, y: y - 18, width: 420, height: 17)
+            content.addSubview(detail)
+        }
+        let records = NSButton(title: "설치 기록…", target: self, action: #selector(showLog))
+        records.bezelStyle = .rounded
+        records.frame = NSRect(x: 20, y: 48, width: 102, height: 28)
+        content.addSubview(records)
+        let note = NSTextField(labelWithString: "메뉴를 숨겨도 Finder나 Spotlight에서 앱을 열어 설정할 수 있습니다.")
+        note.font = .systemFont(ofSize: 11)
+        note.textColor = .secondaryLabelColor
+        note.frame = NSRect(x: 24, y: 24, width: 472, height: 17)
+        content.addSubview(note)
+        log.isEditable = false
+        log.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
         refresh()
         if CommandLine.arguments.contains("--smoke-test") && !fixture { NSApp.terminate(nil); return }
         if fixture { applyPayload(); return }
         guard isCanonical else {
-            button.title = FileManager.default.fileExists(atPath: canonical.path) ? "기존 앱 열기" : "앱 설치"
-            showLog()
+            showSettings()
             return
         }
         do {
@@ -98,10 +137,32 @@ final class Installer: NSObject, NSApplicationDelegate, SPUUpdaterDelegate, SPUS
         switch phase {
         case .needsInstall: text = "앱 설치 필요"
         case .applying: text = "변경 파일 확인 및 적용 중"
-        case .ready: text = "엔진과 제작 스킬 최신 상태"
+        case .ready: text = updateAvailable ? "업데이트가 있습니다" : "정상 실행 중"
         case .failed(let message): text = "오류: \(message)"
         }
-        status.stringValue = text
+        status.stringValue = adopting ? "앱 설치 중" : text
+        switch phase {
+        case .needsInstall:
+            button.title = adopting ? "설치 중…" : "앱 설치"
+            button.action = #selector(install)
+        case .applying:
+            button.title = "적용 중…"
+            button.action = #selector(install)
+        case .ready:
+            button.title = "업데이트 확인…"
+            button.action = #selector(checkUpdates)
+        case .failed:
+            button.title = "다시 시도"
+            button.action = #selector(install)
+        }
+        button.isEnabled = !applying && !adopting && (phase != .ready || controller != nil)
+        progress.isHidden = !applying
+        if applying { progress.startAnimation(nil) } else { progress.stopAnimation(nil) }
+        stateIcon.isHidden = applying
+        stateIcon.image = NSImage(systemSymbolName: phase == .ready ? "checkmark.circle.fill" : "info.circle", accessibilityDescription: status.stringValue)
+        stateIcon.contentTintColor = phase == .ready ? .systemGreen : .secondaryLabelColor
+        loginOption.state = !fixture && SMAppService.mainApp.status == .enabled ? .on : .off
+        loginOption.isEnabled = !fixture && isCanonical && phase == .ready
         statusItem.button?.image = NSImage(systemSymbolName: updateAvailable ? "arrow.down.circle.fill" : "gearshape", accessibilityDescription: updateAvailable ? "업데이트 있음" : "Aside Automation Creator")
         statusItem.button?.title = updateAvailable ? " 업데이트 있음" : ""
         statusItem.button?.toolTip = text
@@ -119,7 +180,7 @@ final class Installer: NSObject, NSApplicationDelegate, SPUUpdaterDelegate, SPUS
             menu.addItem(item)
         }
         add("Aside Automation Creator \(version)", nil, enabled: false)
-        add(text, #selector(showLog))
+        add(text, #selector(showSettings))
         menu.addItem(.separator())
         add(updateAvailable ? "업데이트 있음" : "업데이트 확인…", #selector(checkUpdates), enabled: controller != nil && !applying && !adopting)
         add("자동 업데이트 확인", #selector(toggleChecks), enabled: controller != nil, checked: controller?.updater.automaticallyChecksForUpdates ?? true)
@@ -128,16 +189,48 @@ final class Installer: NSObject, NSApplicationDelegate, SPUUpdaterDelegate, SPUS
         menu.addItem(.separator())
         add(isCanonical ? "엔진과 스킬 다시 확인 / 복구" : "앱 설치 / 기존 앱 열기", #selector(install), enabled: !applying && !adopting)
         add("메뉴 막대에 표시", #selector(toggleMenuVisibility), checked: statusItem.isVisible)
-        add("설정과 설치 기록 보기", #selector(showLog))
+        add("설정…", #selector(showSettings))
+        add("설치 기록…", #selector(showLog))
         add("종료", #selector(quit), enabled: !applying && !adopting)
+        logWindow?.contentView?.subviews.compactMap { $0 as? NSButton }.forEach { $0.isEnabled = !applying && !adopting }
         statusItem.menu = menu
     }
 
-    @objc func showLog() { window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true) }
+    @objc func showSettings() {
+        refresh()
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+    @objc func showLog() {
+        if logWindow == nil {
+            let records = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 400), styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
+            records.title = "설치 기록"
+            records.isReleasedWhenClosed = false
+            records.center()
+            let scroll = NSScrollView(frame: NSRect(x: 16, y: 58, width: 568, height: 326))
+            scroll.autoresizingMask = [.width, .height]
+            scroll.hasVerticalScroller = true
+            log.frame = scroll.contentView.bounds
+            log.autoresizingMask = [.width]
+            log.isVerticallyResizable = true
+            log.textContainer?.widthTracksTextView = true
+            scroll.documentView = log
+            records.contentView?.addSubview(scroll)
+            let repair = NSButton(title: "엔진과 스킬 다시 확인", target: self, action: #selector(install))
+            repair.bezelStyle = .rounded
+            repair.frame = NSRect(x: 16, y: 16, width: 190, height: 30)
+            repair.isEnabled = !applying && !adopting
+            records.contentView?.addSubview(repair)
+            logWindow = records
+        }
+        logWindow?.contentView?.subviews.compactMap { $0 as? NSButton }.forEach { $0.isEnabled = !applying && !adopting }
+        logWindow?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
     @objc func quit() { NSApp.terminate(nil) }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply { applying || adopting ? .terminateCancel : .terminateNow }
-    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool { showLog(); return true }
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool { showSettings(); return true }
     @objc func install() {
         guard !applying && !adopting else { return }
         if phase == .ready { applyPayload(); return }
@@ -150,8 +243,6 @@ final class Installer: NSObject, NSApplicationDelegate, SPUUpdaterDelegate, SPUS
             let desired = try desiredReceipt()
             _ = try PayloadState.isCurrent(PayloadState.read(from: receiptURL), desired: desired)
             phase = .applying
-            button.isEnabled = false
-            progress.startAnimation(nil)
             refresh()
             let resources = Bundle.main.resourceURL!
             runScript(resources.appendingPathComponent("bootstrap.sh"), arguments: [resources.path]) { code, output in
@@ -161,9 +252,6 @@ final class Installer: NSObject, NSApplicationDelegate, SPUUpdaterDelegate, SPUS
                     self.phase = .ready
                     self.becameReady()
                 } catch { self.fail(error) }
-                self.progress.stopAnimation(nil)
-                self.button.isEnabled = true
-                self.button.title = self.phase == .ready ? "다시 적용" : "다시 시도"
                 if self.fixture && CommandLine.arguments.contains("--smoke-test") { exit(self.phase == .ready ? 0 : 1) }
                 let resume = self.resumeUpdate
                 self.resumeUpdate = nil
@@ -212,11 +300,9 @@ final class Installer: NSObject, NSApplicationDelegate, SPUUpdaterDelegate, SPUS
     func adoptApp() {
         guard !fixture, let resources = Bundle.main.resourceURL else { return }
         adopting = true
-        button.isEnabled = false
         refresh()
         runScript(resources.appendingPathComponent("adopt-app.sh"), arguments: [Bundle.main.bundlePath]) { code, output in
             self.adopting = false
-            self.button.isEnabled = true
             do {
                 guard code == 0, output.components(separatedBy: .newlines).contains("AAC_APP_PATH=\(self.canonical.path)") else { throw PayloadState.failure("앱을 설치하지 못했습니다. 기존 앱을 덮어쓰지 않습니다.") }
                 try PayloadState.refuseSymlinks(at: self.canonical)
@@ -254,10 +340,8 @@ final class Installer: NSObject, NSApplicationDelegate, SPUUpdaterDelegate, SPUS
     func fail(_ error: Error) {
         phase = .failed(error.localizedDescription)
         log.textStorage?.append(NSAttributedString(string: "\n\(error.localizedDescription)\n"))
-        button.title = "다시 시도"
-        button.isEnabled = true
         refresh()
-        showLog()
+        showSettings()
     }
 
     @objc func checkUpdates() { guard !applying else { return }; controller?.checkForUpdates(nil) }
@@ -283,7 +367,7 @@ final class Installer: NSObject, NSApplicationDelegate, SPUUpdaterDelegate, SPUS
             else { try SMAppService.mainApp.register() }
             UserDefaults.standard.set(true, forKey: "AACLoginRegistrationAttempted")
             refresh()
-        } catch { log.textStorage?.append(NSAttributedString(string: "\n로그인 시 실행 설정 실패: \(error.localizedDescription)\n")); showLog() }
+        } catch { log.textStorage?.append(NSAttributedString(string: "\n로그인 시 실행 설정 실패: \(error.localizedDescription)\n")); showSettings() }
     }
 
     func updater(_ updater: SPUUpdater, didFindValidUpdate item: SUAppcastItem) {
@@ -294,9 +378,15 @@ final class Installer: NSObject, NSApplicationDelegate, SPUUpdaterDelegate, SPUS
         let recommend = launchUpdateCheck.finish(failed: error != nil)
         refresh()
         if recommend {
-            DispatchQueue.main.async { [weak self] in
-                guard let self, self.phase == .ready, !self.adopting else { return }
-                self.controller?.checkForUpdates(nil)
+            updateReadinessObservation?.invalidate()
+            updateReadinessObservation = updater.observe(\.canCheckForUpdates, options: [.initial, .new]) { [weak self] updater, _ in
+                guard updater.canCheckForUpdates else { return }
+                DispatchQueue.main.async { [weak self] in
+                    guard let self, self.phase == .ready, !self.adopting, updater.canCheckForUpdates else { return }
+                    self.updateReadinessObservation?.invalidate()
+                    self.updateReadinessObservation = nil
+                    self.controller?.checkForUpdates(nil)
+                }
             }
         }
     }
