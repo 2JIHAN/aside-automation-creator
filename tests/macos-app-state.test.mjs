@@ -19,7 +19,7 @@ function clearQuarantine(file) {
 const policy = resolve(import.meta.dirname, '../installer/macos/PayloadState.swift');
 
 test('payload receipts protect freshness and commit only confirmed successful installs', { skip: process.platform !== 'darwin' }, t => {
-  const directory = realpathSync(mkdtempSync(join(tmpdir(), 'aac-app-state-')));
+  const directory = realpathSync(mkdtempSync(join(process.env.RUNNER_TEMP || tmpdir(), 'aac-app-state-')));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const runner = join(directory, 'main.swift');
   const executable = join(directory, 'policy-tests');
