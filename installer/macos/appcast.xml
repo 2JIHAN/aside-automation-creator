@@ -1,0 +1,15 @@
+<?xml version="1.0" standalone="yes"?>
+<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
+    <channel>
+        <title>Aside Automation Creator</title>
+        <item>
+            <title>0.3.1</title>
+            <pubDate>Thu, 05 Nov 2026 17:04:19 +0900</pubDate>
+            <link>https://github.com/2JIHAN/aside-automation-creator</link>
+            <sparkle:version>0.3.1</sparkle:version>
+            <sparkle:shortVersionString>0.3.1</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.5</sparkle:minimumSystemVersion>
+            <enclosure url="https://github.com/2JIHAN/aside-automation-creator/releases/download/v0.3.1/AsideAutomationCreator-0.3.1-macOS.zip" length="194402701" type="application/octet-stream" sparkle:edSignature="CazZmnjbA5VFlVzBArtA+zwSIOuVndl11MYtR6U6IJwKq5lACz4No35MdfaDWB3hK/aUx32qR1UWA0WuaBkcCg=="/>
+        </item>
+    </channel>
+</rss>
