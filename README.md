@@ -58,8 +58,10 @@ aside-automation-creator로 ~하는 일을 자동화하려고 해.
 
 에이전트가 작업 지침과 실행 파일을 기본적으로 `~/aside-automations/작업명/`에 저장합니다. 예약 시간과 알림 대상, 자동으로 처리해도 되는 범위는 업무에 맞게 정해줍니다.
 
+## 수동 설치
+
 <details>
-<summary>수동 설치</summary>
+<summary>펼쳐 보기</summary>
 
 ### 설치와 업데이트 시 주의사항
 
