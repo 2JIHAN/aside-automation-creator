@@ -26,11 +26,13 @@ cp "$WORK/$ZIP" "$OUT/$ZIP"
 awk -v target="$VERSION" -v segment="/download/v$VERSION/" '
   /<sparkle:version>/ { item_version=$0; sub(/^.*<sparkle:version>/, "", item_version); sub(/<.*$/, "", item_version) }
   /<enclosure / && item_version != target { gsub(segment, "/download/v" item_version "/") }
+  /<enclosure / { gsub(/Aside%20Automation%20Creator/, "AsideAutomationCreator") }
   { print }
 ' "$WORK/appcast.xml" > "$OUT/appcast.xml"
 for delta in "$WORK"/*.delta; do
   [ -f "$delta" ] || continue
-  cp "$delta" "$OUT/"
+  delta_name=${delta##*/}
+  cp "$delta" "$OUT/${delta_name// /}"
 done
 (cd "$OUT"; shasum -a 256 "$ZIP" > "$ZIP.sha256")
 printf 'Prepared signed update: %s\nFeed: %s\n' "$OUT/$ZIP" "$OUT/appcast.xml"
