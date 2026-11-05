@@ -16,9 +16,7 @@ Aside에서 반복할 업무를 가르치고, 같은 순서로 다시 실행하�
 | Windows | [x64 Setup 다운로드](https://github.com/2JIHAN/aside-automation-creator/releases/latest) | Intel 또는 AMD |
 | Windows | [ARM64 Setup 다운로드](https://github.com/2JIHAN/aside-automation-creator/releases/latest) | Windows ARM |
 
-1. 위 링크에서 설치 파일을 다운로드합니다.
-2. macOS는 DMG 안의 설치 앱을 실행합니다. Windows는 Setup을 실행합니다.
-3. 설치가 끝나면 Aside에서 새 채팅을 엽니다.
+설치가 끝나면 Aside에서 새 채팅을 엽니다.
 
 터미널이나 Git, Node.js를 미리 준비할 필요는 없습니다. 설치기가 전용 Node.js와 필요한 공식 Aside CLI를 준비합니다. Windows에서는 미서명 Setup에 SmartScreen 경고가 표시될 수 있습니다. 사이트 로그인과 기기 승인은 직접 진행합니다.
 
