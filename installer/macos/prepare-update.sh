@@ -23,7 +23,11 @@ FEED="$(dirname "$0")/appcast.xml"
 if [ -f "$FEED" ]; then cp "$FEED" "$WORK/appcast.xml"; fi
 "$SPARKLE/bin/generate_appcast" --account aside-automation-creator --maximum-deltas 1 --download-url-prefix "https://github.com/2JIHAN/aside-automation-creator/releases/download/v$VERSION/" --link 'https://github.com/2JIHAN/aside-automation-creator' "$WORK"
 cp "$WORK/$ZIP" "$OUT/$ZIP"
-cp "$WORK/appcast.xml" "$OUT/appcast.xml"
+awk -v target="$VERSION" -v segment="/download/v$VERSION/" '
+  /<sparkle:version>/ { item_version=$0; sub(/^.*<sparkle:version>/, "", item_version); sub(/<.*$/, "", item_version) }
+  /<enclosure / && item_version != target { gsub(segment, "/download/v" item_version "/") }
+  { print }
+' "$WORK/appcast.xml" > "$OUT/appcast.xml"
 for delta in "$WORK"/*.delta; do
   [ -f "$delta" ] || continue
   cp "$delta" "$OUT/"
