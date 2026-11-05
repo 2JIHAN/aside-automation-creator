@@ -13,7 +13,9 @@ trap 'rm -rf "$WORK"' EXIT
 APP="$WORK/image/Aside Automation Creator.app"
 RES="$APP/Contents/Resources"
 mkdir -p "$APP/Contents/MacOS" "$RES/payload" "$RES/cli" "$RES/runtime" "$WORK/icon.iconset"
-for item in SKILL.md engine.mjs README.md install-to-aside.sh assets; do /bin/cp -R "$ROOT/$item" "$RES/payload/"; done
+for item in SKILL.md engine.mjs README.md install-to-aside.sh; do /bin/cp "$ROOT/$item" "$RES/payload/"; done
+mkdir -p "$RES/payload/assets"
+/bin/cp -R "$ROOT/assets/template" "$RES/payload/assets/"
 /bin/cp "$ROOT/installer/macos/bootstrap.sh" "$ROOT/installer/macos/adopt-app.sh" "$RES/"
 SPARKLE_VERSION=2.10.1
 SPARKLE_SHA256=1a856d2a9edb8e628de88121d7be04cf0e2167f8641650b78fca00b14244cf27
@@ -49,8 +51,7 @@ for arch in arm64 x64; do
   /usr/sbin/spctl --assess --type execute "$WORK/cli-$arch/Aside CLI.app"
   shasum -a 256 "$RES/cli/$arch.zip" | sed "s|$RES/cli/||" >> "$RES/cli-sha256.txt"
 done
-(cd "$RES"; find payload runtime -type f | LC_ALL=C sort | while IFS= read -r file; do shasum -a 256 "$file"; done) > "$RES/payload-manifest.txt"
-shasum -a 256 "$RES/payload-manifest.txt" | awk '{print $1}' > "$RES/payload-fingerprint.txt"
+/bin/bash "$ROOT/installer/macos/payload-fingerprint.sh" "$RES" > "$RES/payload-fingerprint.txt"
 for size in 16 32 128 256 512; do
   /usr/bin/sips -z "$size" "$size" "$ROOT/assets/readme/robot-laptop-transparent.png" --out "$WORK/icon.iconset/icon_${size}x${size}.png" >/dev/null
   double=$((size * 2))

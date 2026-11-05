@@ -85,8 +85,8 @@ final class Installer: NSObject, NSApplicationDelegate, SPUUpdaterDelegate, SPUS
         let text: String
         switch phase {
         case .needsInstall: text = "앱 설치 필요"
-        case .applying: text = "페이로드 적용 중"
-        case .ready: text = "페이로드 최신 상태"
+        case .applying: text = "변경 파일 확인 및 적용 중"
+        case .ready: text = "엔진과 제작 스킬 최신 상태"
         case .failed(let message): text = "오류: \(message)"
         }
         status.stringValue = text
@@ -110,7 +110,7 @@ final class Installer: NSObject, NSApplicationDelegate, SPUUpdaterDelegate, SPUS
         add("자동 다운로드 및 설치", #selector(toggleDownloads), enabled: controller != nil, checked: controller?.updater.automaticallyDownloadsUpdates ?? false)
         add("로그인 시 실행", #selector(toggleLogin), enabled: !fixture && isCanonical && phase == .ready, checked: !fixture && SMAppService.mainApp.status == .enabled)
         menu.addItem(.separator())
-        add(isCanonical ? "페이로드 다시 적용" : "앱 설치 / 기존 앱 열기", #selector(install), enabled: !applying && !adopting)
+        add(isCanonical ? "엔진과 스킬 다시 확인 / 복구" : "앱 설치 / 기존 앱 열기", #selector(install), enabled: !applying && !adopting)
         add("설치 기록 보기", #selector(showLog))
         add("종료", #selector(quit), enabled: !applying && !adopting)
         statusItem.menu = menu

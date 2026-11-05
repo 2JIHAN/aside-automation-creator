@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, rmSync, realpathSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -19,7 +19,7 @@ function clearQuarantine(file) {
 const policy = resolve(import.meta.dirname, '../installer/macos/PayloadState.swift');
 
 test('payload receipts protect freshness and commit only confirmed successful installs', { skip: process.platform !== 'darwin' }, t => {
-  const directory = mkdtempSync(join(tmpdir(), 'aac-app-state-'));
+  const directory = realpathSync(mkdtempSync(join(tmpdir(), 'aac-app-state-')));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const runner = join(directory, 'main.swift');
   const executable = join(directory, 'policy-tests');

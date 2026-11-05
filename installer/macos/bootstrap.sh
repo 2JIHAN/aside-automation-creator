@@ -31,7 +31,7 @@ trap 'rm -rf "$WORK"' EXIT
 printf '설치 파일을 준비하고 있습니다.\n'
 /bin/cp -R "$RESOURCES/payload" "$WORK/payload"
 mkdir -p "$WORK/payload/runtime"
-/bin/cp "$RESOURCES/runtime/$ARCH/node" "$WORK/payload/runtime/node"
+/bin/cp -c "$RESOURCES/runtime/$ARCH/node" "$WORK/payload/runtime/node" 2>/dev/null || /bin/cp "$RESOURCES/runtime/$ARCH/node" "$WORK/payload/runtime/node"
 clear_tree() {
   local item attrs
   while IFS= read -r -d '' item; do

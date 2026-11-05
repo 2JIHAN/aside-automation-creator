@@ -23,10 +23,13 @@ Sparkle 키는 로그인 키체인의 `aside-automation-creator` 계정을 사�
 
 ```sh
 SPARKLE_DISTRIBUTION_DIR=/absolute/Sparkle \
-  bash installer/macos/prepare-update.sh /absolute/output 0.3.1
+  bash installer/macos/prepare-update.sh /absolute/output 0.3.2 \
+    /absolute/previous/AsideAutomationCreator-0.3.1-macOS.zip
 ```
 
-이 명령은 공증과 버전, 서명 키를 검사하고 ZIP 및 서명된 업데이트 항목이 들어 있는 `appcast.xml`을 만듭니다. 공개 배포는 수행하지 않습니다.
+이 명령은 공증과 버전, 서명 키를 검사하고 ZIP 및 서명된 업데이트 항목이 들어 있는 `appcast.xml`을 만듭니다. 이전 ZIP을 함께 넘기면 가능한 경우 차등 업데이트 파일도 만듭니다. 생성된 `.delta` 파일도 새 릴리즈에 올립니다. 공개 배포는 수행하지 않습니다.
+
+페이로드 지문은 엔진과 SKILL.md, 실제 템플릿 및 Node에 한정합니다. 앱 UI와 문서, 장식 이미지는 재설치 여부를 바꾸지 않습니다. 패키지 갱신은 내용이 같은 파일을 건너뛰고 변경된 기존 파일만 백업합니다. Git 소스를 패키지로 처음 전환할 때만 기존 Git 저장소 전체를 보존합니다.
 
 1. ZIP과 공증된 DMG를 해당 GitHub 릴리즈에 올립니다.
 2. GitHub에서 파일을 다시 받아 SHA256과 서명을 확인합니다.

@@ -296,19 +296,100 @@ function packageSource(f) {
   clean(f.source);
 }
 
-test('source package copies bundled Node without Git and backs up whole owned repository and profiles', t => {
+function packageRun(f) { return f.run({}, ['--source-directory', f.source]); }
+function repoBackups(f) { return readdirSync(f.root).filter(n => n.startsWith('source.backup-')); }
+function files(path, prefix = '') {
+  return readdirSync(path).sort().flatMap(name => {
+    const relative = prefix + name, full = join(path, name);
+    return lstatSync(full).isDirectory() ? files(full, relative + '/') : [relative];
+  });
+}
+function identity(path) {
+  const st = statSync(path); return [st.ino, st.mtimeMs, st.mode];
+}
+function copySpy(f) {
+  const log = join(f.root, 'copies.log');
+  put(join(f.bin, 'cp'), '#!/bin/bash\nprintf "%s\\n" "$*" >> "'+log+'"\nexec /bin/cp "$@"\n');
+  chmodSync(join(f.bin, 'cp'), 0o755); clean(join(f.bin, 'cp')); return log;
+}
+
+test('package identical rerun copies zero files, preserves inodes/mtimes and user files, and creates no backup', t => {
   const f = fixture(t); packageSource(f);
   put(join(f.dest(1), 'local.txt'), 'keep profile');
-  success(f.run({}, ['--source-directory', f.source]));
-  assert.equal(existsSync(f.log), false);
+  success(packageRun(f));
   assert.deepEqual(readdirSync(f.repo).sort(), ['.aside-automation-creator-package', 'README.md', 'SKILL.md', 'assets', 'engine.mjs', 'install-to-aside.sh', 'runtime']);
-  assert.equal(readFileSync(join(f.repo, 'runtime/node'), 'utf8'), readFileSync(join(f.source, 'runtime/node'), 'utf8'));
-  put(join(f.repo, 'local.txt'), 'keep repo'); const before = tree(f.repo);
-  success(f.run({}, ['--source-directory', f.source]));
-  const backups = readdirSync(f.root).filter(n => n.startsWith('source.backup-'));
-  assert.equal(backups.length, 1); assert.deepEqual(tree(join(f.root, backups[0])), before);
+  put(join(f.repo, 'local.txt'), 'keep repo');
+  const paths = [f.repo, ...files(f.repo).map(p => join(f.repo, p)), ...[0,1,2].flatMap(n => [f.dest(n), ...files(f.dest(n)).map(p => join(f.dest(n), p))])];
+  const before = paths.map(identity); const log = copySpy(f);
+  const second = packageRun(f); success(second);
+  assert.match(second.stdout, /공용 파일: 업데이트 0개, 건너뜀 7개/);
+  assert.match(second.stdout, /프로필 파일: 업데이트 0개, 건너뜀 6개/);
+  assert.match(second.stdout, /이미 최신 3개/);
+  assert.equal(existsSync(log), false);
+  assert.deepEqual(paths.map(identity), before);
+  assert.deepEqual(repoBackups(f), []);
+  assert.equal(existsSync(join(f.aside, 'skill-backups')), false);
   assert.equal(existsSync(f.log), false);
-  for (const n of [0,1,2]) installed(f,n);
+});
+
+test('package engine-only update backs up only engine and leaves profiles and runtime unchanged', t => {
+  const f=fixture(t); packageSource(f); success(packageRun(f));
+  const node = identity(join(f.repo, 'runtime/node'));
+  const profiles = [0,1,2].map(n => identity(join(f.dest(n), 'SKILL.md')));
+  put(join(f.source, 'engine.mjs'), '// new engine\n');
+  const result=packageRun(f); success(result);
+  const backups=repoBackups(f); assert.equal(backups.length,1);
+  assert.match(backups[0], /^source\.backup-\d{8}-\d{6}-\d+$/);
+  assert.deepEqual(files(join(f.root,backups[0])), ['engine.mjs']);
+  assert.equal(readFileSync(join(f.root,backups[0],'engine.mjs'),'utf8'),'// shared engine fixture\n');
+  assert.deepEqual(identity(join(f.repo,'runtime/node')),node);
+  assert.deepEqual([0,1,2].map(n => identity(join(f.dest(n),'SKILL.md'))),profiles);
+  assert.equal(existsSync(join(f.aside,'skill-backups')),false);
+  assert.match(result.stdout,/공용 파일: 업데이트 1개, 건너뜀 6개/);
+  assert.match(result.stdout,/프로필 파일: 업데이트 0개, 건너뜀 6개/);
+});
+
+test('package template-only update backs up just changed template in shared source and each profile', t => {
+  const f=fixture(t); packageSource(f); success(packageRun(f));
+  put(join(f.source,'assets/template/marker.txt'),'new template\n');
+  const result=packageRun(f); success(result);
+  assert.deepEqual(files(join(f.root,repoBackups(f)[0])),['assets/template/marker.txt']);
+  const base=join(f.aside,'skill-backups',skill);
+  assert.deepEqual(files(join(base,readdirSync(base)[0])),[0,1,2].map(n=>'u'+n+'/assets/template/marker.txt'));
+  for (const n of [0,1,2]) assert.equal(readFileSync(join(f.dest(n),'assets/template/marker.txt'),'utf8'),'new template\n');
+  assert.match(result.stdout,/프로필 파일: 업데이트 3개, 건너뜀 3개/);
+});
+
+test('package profiles exclude README, decorative assets and runtime, preserving old extras untouched', t => {
+  const f=fixture(t); packageSource(f);
+  put(join(f.source,'assets/readme/logo.png'),'new logo');
+  put(join(f.dest(0),'assets/readme/logo.png'),'old logo');
+  put(join(f.dest(0),'README.md'),'old readme');
+  const logo=identity(join(f.dest(0),'assets/readme/logo.png'));
+  success(packageRun(f));
+  assert.equal(readFileSync(join(f.repo,'assets/readme/logo.png'),'utf8'),'new logo');
+  assert.equal(readFileSync(join(f.dest(0),'assets/readme/logo.png'),'utf8'),'old logo');
+  assert.deepEqual(identity(join(f.dest(0),'assets/readme/logo.png')),logo);
+  assert.equal(readFileSync(join(f.dest(0),'README.md'),'utf8'),'old readme');
+  installed(f,1); installed(f,2);
+  assert.equal(existsSync(join(f.aside,'skill-backups')),false);
+});
+
+test('package new profile receives skill without copying shared Node again', t => {
+  const f=fixture(t); packageSource(f); success(packageRun(f));
+  mkdirSync(join(f.aside,'u/3')); const log=copySpy(f);
+  const node=identity(join(f.repo,'runtime/node')); const result=packageRun(f); success(result);
+  installed(f,3); assert.deepEqual(identity(join(f.repo,'runtime/node')),node);
+  const copies=readFileSync(log,'utf8').trim().split('\n');
+  assert.equal(copies.length,2); assert.ok(copies.every(line => !line.includes(join(f.repo, 'runtime/node'))), copies.join('\n'));
+  assert.deepEqual(repoBackups(f),[]);
+});
+
+test('package mode-only change updates and backs up only that file', t => {
+  const f=fixture(t); packageSource(f); success(packageRun(f));
+  chmodSync(join(f.source,'engine.mjs'),0o444); success(packageRun(f));
+  assert.equal(statSync(join(f.repo,'engine.mjs')).mode & 0o777,0o444);
+  assert.deepEqual(files(join(f.root,repoBackups(f)[0])),['engine.mjs']);
 });
 
 for (const kind of ['wrong origin', 'unrelated', 'symlink runtime', 'nested runtime symlink', 'symlink root', 'missing engine']) {
@@ -330,18 +411,53 @@ for (const kind of ['wrong origin', 'unrelated', 'symlink runtime', 'nested runt
 test('source package recognizes expected local Git origin without invoking Git', t => {
   const f=fixture(t); packageSource(f);
   put(join(f.repo,'.git/config'), '[remote "origin"]\n\turl = '+url+'\n');
+  put(join(f.repo,'local.txt'),'keep local work');
+  const before=tree(f.repo);
   success(f.run({},['--source-directory',f.source])); assert.equal(existsSync(f.log),false);
+  const backups=repoBackups(f); assert.equal(backups.length,1);
+  assert.deepEqual(tree(join(f.root,backups[0])),before);
 });
 
-test('source package failed promotion restores entire owned repo before profile writes', t => {
+for (const target of ['shared', 'profile']) {
+  test('package failed per-file promotion keeps old '+target+' file intact and signals failure', t => {
+    const f=fixture(t); packageSource(f); success(packageRun(f));
+    const dest=target==='shared' ? join(f.repo,'engine.mjs') : join(f.dest(0),'assets/template/marker.txt');
+    const original=readFileSync(dest,'utf8'), before=identity(dest);
+    put(join(f.source,target==='shared' ? 'engine.mjs' : 'assets/template/marker.txt'),'replacement\n');
+    put(join(f.bin,'mv'),'#!/bin/bash\nfor arg in "$@"; do [ "$arg" != "'+dest+'" ] || exit 97; done\nexec /bin/mv "$@"\n');
+    chmodSync(join(f.bin,'mv'),0o755); clean(join(f.bin,'mv'));
+    const result=packageRun(f); assert.notEqual(result.status,0);
+    assert.match(result.stderr,/기존 파일을 유지/); assert.doesNotMatch(result.stdout,/완료: 설치/);
+    assert.equal(readFileSync(dest,'utf8'),original); assert.deepEqual(identity(dest),before);
+    const base=join(f.aside,'skill-backups',skill);
+    const backup=target==='shared' ? join(f.root,repoBackups(f)[0],'engine.mjs') : join(base,readdirSync(base)[0],'u0/assets/template/marker.txt');
+    assert.equal(readFileSync(backup,'utf8'),original);
+    assert.ok(!files(f.repo).some(p=>p.includes('.automation-creator-file.')));
+    assert.ok(!files(f.dest(0)).some(p=>p.includes('.automation-creator-file.')));
+  });
+}
+
+for (const area of ['shared', 'profile']) {
+  test('package refuses nested '+area+' destination symlink ancestors without target writes', t => {
+    const f=fixture(t); packageSource(f); success(packageRun(f));
+    const outside=join(f.root,'outside'); put(join(outside,'marker.txt'),'keep');
+    const parent=area==='shared' ? join(f.repo,'assets/template') : join(f.dest(0),'assets/template');
+    rmSync(parent,{recursive:true}); symlinkSync(outside,parent);
+    const before=tree(outside); const result=packageRun(f);
+    assert.notEqual(result.status,0); assert.match(result.stderr,/심볼릭 링크/);
+    assert.deepEqual(tree(outside),before); assert.deepEqual(repoBackups(f),[]);
+    assert.equal(existsSync(join(f.aside,'skill-backups')),false);
+  });
+}
+
+test('package profile root symlink is backed up as link without target changes', t => {
   const f=fixture(t); packageSource(f);
-  success(f.run({},['--source-directory',f.source]));
-  put(join(f.repo,'local.txt'),'keep'); const before=tree(f.repo), profiles=tree(join(f.aside,'u'));
-  put(join(f.bin,'mv'), '#!/bin/bash\ncase "$1" in "$ASIDE_HOME"/.automation-creator-install.*/repository) exit 97 ;; esac\nexec /bin/mv "$@"\n');
-  chmodSync(join(f.bin,'mv'),0o755); clean(join(f.bin,'mv'));
-  assert.notEqual(f.run({},['--source-directory',f.source]).status,0);
-  assert.deepEqual(tree(f.repo),before); assert.deepEqual(tree(join(f.aside,'u')),profiles);
-  assert.equal(existsSync(f.log),false);
+  const outside=join(f.root,'outside'); put(join(outside,'sentinel'),'keep');
+  mkdirSync(resolve(f.dest(0),'..'),{recursive:true}); symlinkSync(outside,f.dest(0));
+  success(packageRun(f)); installed(f,0);
+  assert.deepEqual(readdirSync(outside),['sentinel']);
+  const base=join(f.aside,'skill-backups',skill), backup=join(base,readdirSync(base)[0],'u0');
+  assert.equal(lstatSync(backup).isSymbolicLink(),true); assert.equal(readlinkSync(backup),outside);
 });
 
 test('source package refuses symlink ancestors of repository without outside writes or backups', t => {
@@ -356,4 +472,24 @@ test('source package refuses symlink ancestors of repository without outside wri
   assert.notEqual(result.status,0); assert.match(result.stderr,/상위 경로가 심볼릭 링크/);
   assert.deepEqual(tree(outside),before); assert.deepEqual(tree(join(f.aside,'u')),profiles);
   assert.equal(existsSync(f.log),false);
+});
+
+
+test('Darwin package clears only touched copies, preserving modes and unrelated attributes', {skip: !darwin}, t => {
+  const f=fixture(t); packageSource(f); success(packageRun(f));
+  const engine=join(f.source,'engine.mjs'), node=join(f.repo,'runtime/node');
+  put(engine,'// tagged replacement\n');
+  for (const [file,name,value] of [
+    [engine,'com.apple.quarantine','0081;00000000;Aside;'],
+    [engine,'test.aside.preserve','keep'],
+    [node,'com.apple.quarantine','0081;00000000;Aside;'],
+  ]) assert.equal(spawnSync('/usr/bin/xattr',['-w',name,value,file]).status,0);
+  chmodSync(engine,0o444); const before=identity(node);
+  success(packageRun(f));
+  const dest=join(f.repo,'engine.mjs');
+  assert.equal(statSync(dest).mode & 0o777,0o444);
+  assert.doesNotMatch(spawnSync('/usr/bin/xattr',[dest],{encoding:'utf8'}).stdout,/com.apple.quarantine/);
+  assert.equal(spawnSync('/usr/bin/xattr',['-p','test.aside.preserve',dest],{encoding:'utf8'}).stdout.trim(),'keep');
+  assert.match(spawnSync('/usr/bin/xattr',[node],{encoding:'utf8'}).stdout,/com.apple.quarantine/);
+  assert.deepEqual(identity(node),before);
 });
