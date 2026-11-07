@@ -6,6 +6,8 @@ param(
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+# A PS7 parent can inject incompatible module paths into Windows PowerShell 5.1.
+if ($PSVersionTable.PSVersion.Major -le 5) { $env:PSModulePath = Join-Path $PSHOME 'Modules' }
 $Url = 'https://github.com/2JIHAN/aside-automation-creator.git'
 
 function Assert-NoLink([string]$Path) {
@@ -82,7 +84,7 @@ function Copy-Legacy([string]$Source, [string]$Target) {
 function Clear-Legacy([string]$Root, [string]$Baseline) {
     if (-not (Test-Path -LiteralPath $Baseline -PathType Leaf)) { return }
     try { Assert-LegacyParents $Baseline; Assert-LegacyParents (Join-Path $Root 'assets/template') } catch { return }
-    foreach ($Line in Get-Content -LiteralPath $Baseline) {
+    foreach ($Line in Get-Content -LiteralPath $Baseline -Encoding UTF8) {
         if ($Line -notmatch '^([0-9a-f]{64})\t(assets/template/[^\\]+)$') { continue }
         $Hash = $Matches[1]; $Relative = $Matches[2]
         if ($Relative.Split('/') -contains '..' -or $Relative.Split('/') -contains '.') { continue }
