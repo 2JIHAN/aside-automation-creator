@@ -13,10 +13,14 @@ function fixture() {
   mkdirSync(join(home, '.local/bin'), { recursive: true });
   writeFileSync(join(home, '.local/bin/aside'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
   mkdirSync(join(resources, 'payload'), { recursive: true });
-  for (const name of ['SKILL.md', 'engine.mjs', 'README.md', 'install-to-aside.sh', 'assets']) cpSync(join(root, name), join(resources, 'payload', name), { recursive: true });
+  for (const name of ['SKILL.md', 'engine.mjs', 'README.md', 'install-to-aside.sh', 'assets', 'references']) cpSync(join(root, name), join(resources, 'payload', name), { recursive: true });
   for (const arch of ['arm64', 'x64']) {
     mkdirSync(join(resources, 'runtime', arch), { recursive: true });
     writeFileSync(join(resources, 'runtime', arch, 'node'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+  }
+  if (process.platform === 'darwin' && process.env.ASIDE_CLEAR_QUARANTINE) {
+    const clean = spawnSync('/bin/bash', [process.env.ASIDE_CLEAR_QUARANTINE, base], {encoding:'utf8'});
+    assert.equal(clean.status, 0, clean.stdout + clean.stderr);
   }
   const env = { HOME: home, PATH: '/usr/bin:/bin:/usr/sbin:/sbin', AAC_INSTALLER_FIXTURE: '1', AAC_FIXTURE_ROOT: base, ASIDE_HOME: join(home, '.aside'), ASIDE_AUTOMATION_CREATOR_REPO: join(home, 'repository') };
   return { base, home, resources, env };
@@ -29,6 +33,9 @@ test('macOS bootstrap installs only into fixture and confirms byte-identical ski
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.match(result.stdout, /^AAC_INSTALL_COMPLETE$/m);
     assert.equal(readFileSync(join(f.home, '.aside/u/0/skills/user/aside-automation-creator/SKILL.md'), 'utf8'), readFileSync(join(root, 'SKILL.md'), 'utf8'));
+    for (const name of ['assets/scenarios/index.md', 'assets/scenarios/basic/guide.md', 'assets/scenarios/browser-monitor/guide.md', 'references/file-writing-rules.md']) {
+      assert.equal(readFileSync(join(f.home, '.aside/u/0/skills/user/aside-automation-creator', name), 'utf8'), readFileSync(join(root, name), 'utf8'));
+    }
     assert.equal(readFileSync(join(f.home, 'repository/runtime/node'), 'utf8'), '#!/bin/sh\nexit 0\n');
   } finally { rmSync(f.base, { recursive: true, force: true }); }
 });

@@ -50,7 +50,15 @@ check_source() {
   local source="$1"
   [ -f "$source/SKILL.md" ] && [ ! -L "$source/SKILL.md" ] && [ -d "$source/assets" ] || fail '스킬 파일과 assets가 없습니다.'
   [ -f "$source/engine.mjs" ] && [ ! -L "$source/engine.mjs" ] || fail '공통 엔진이 없습니다.'
-  [ -z "$(find "$source/assets" -type l -print -quit)" ] || fail '템플릿의 심볼릭 링크는 설치하지 않습니다.'
+  [ -z "$(find "$source/assets" -path "$source/assets/template" -prune -o -type l -print -quit)" ] || fail '템플릿의 심볼릭 링크는 설치하지 않습니다.'
+  [ ! -L "$source/references" ] || fail 'references의 심볼릭 링크는 설치하지 않습니다.'
+  if [ -e "$source/references" ]; then
+    [ -d "$source/references" ] || fail 'references가 폴더가 아닙니다.'
+    [ -z "$(find "$source/references" -type l -print -quit)" ] || fail 'references의 심볼릭 링크는 설치하지 않습니다.'
+  fi
+  if grep -Fq 'references/file-writing-rules.md' "$source/SKILL.md"; then
+    [ -f "$source/references/file-writing-rules.md" ] || fail '필수 문서 references/file-writing-rules.md가 없습니다.'
+  fi
   grep -Fxq 'name: "aside-automation-creator"' "$source/SKILL.md" || fail '스킬 이름이 다릅니다.'
 }
 
@@ -169,7 +177,45 @@ package_tree() {
   while IFS= read -r -d '' file; do
     relative=${file#"$source"/}
     package_file "$file" "$dest/$relative"
-  done < <(find "$source" -type f -print0)
+  done < <(find "$source" -type f ! -name .DS_Store -print0)
+}
+
+# Only released bytes are disposable. Unknown files remain in the active tree.
+legacy_carry() {
+  local source="$1" dest="$2"
+  [ -e "$source/assets/template" ] || [ -L "$source/assets/template" ] || return 0
+  check_package_parent "$source/assets"
+  check_package_parent "$dest/assets"
+  ensure_dir "$dest/assets"
+  [ ! -e "$dest/assets/template" ] && [ ! -L "$dest/assets/template" ] || fail '새 패키지에 legacy template이 있습니다.'
+  cp -RP "$source/assets/template" "$dest/assets/"
+}
+
+legacy_cleanup() {
+  local root="$1" baseline="$2" hash relative file before after directory
+  [ -f "$baseline" ] && [ ! -L "$baseline" ] || return 0
+  (check_package_parent "$(dirname "$baseline")") >/dev/null 2>&1 || return 0
+  (check_package_parent "$root/assets/template") >/dev/null 2>&1 || return 0
+  [ -d "$root/assets/template" ] || return 0
+  while IFS=$'\t' read -r hash relative; do
+    [[ "$hash" =~ ^[0-9a-f]{64}$ ]] || continue
+    case "$relative" in assets/template/*) ;; *) continue ;; esac
+    case "/$relative/" in */../*|*/./*|*//* ) continue ;; esac
+    file="$root/$relative"
+    (check_package_parent "$(dirname "$file")") >/dev/null 2>&1 || continue
+    [ -f "$file" ] && [ ! -L "$file" ] || continue
+    before=$(ls -id "$file"; file_inode "$file"; ls -ln "$file") || continue
+    [ "$(shasum -a 256 "$file" | awk '{print $1}')" = "$hash" ] || continue
+    after=$(ls -id "$file"; file_inode "$file"; ls -ln "$file") || continue
+    [ "$before" = "$after" ] && [ ! -L "$file" ] || continue
+    (check_package_parent "$(dirname "$file")") >/dev/null 2>&1 || continue
+    if ! rm -- "$file"; then printf '경고: legacy 파일을 보존했습니다: %s\n' "$file" >&2; fi
+  done < "$baseline"
+  while IFS= read -r -d '' directory; do
+    (check_package_parent "$directory") >/dev/null 2>&1 || continue
+    [ -z "$(find "$directory" -mindepth 1 -maxdepth 1 -print -quit)" ] || continue
+    if ! rmdir "$directory"; then printf '경고: legacy 폴더를 보존했습니다: %s\n' "$directory" >&2; fi
+  done < <(find "$root/assets/template" -depth -type d -print0)
 }
 
 main() {
@@ -181,7 +227,7 @@ main() {
     [ -z "$(find "$source_directory" -type l -print -quit)" ] || fail '패키지의 심볼릭 링크는 설치하지 않습니다.'
     source_directory=$(cd "$source_directory" && pwd -P)
     check_source "$source_directory"
-    [ -d "$source_directory/assets/template" ] || fail '패키지 템플릿이 없습니다.'
+    [ -d "$source_directory/assets/scenarios" ] || fail '패키지 템플릿이 없습니다.'
     for file in README.md install-to-aside.sh runtime/node; do
       [ -f "$source_directory/$file" ] || fail "패키지 파일이 없습니다: $file"
     done
@@ -255,6 +301,7 @@ main() {
     for file in SKILL.md engine.mjs README.md install-to-aside.sh; do
       package_file "$source_directory/$file" "$target/$file"
     done
+    if [ -d "$source_directory/references" ]; then package_tree "$source_directory/references" "$target/references"; fi
     for file in assets runtime; do
       package_tree "$source_directory/$file" "$target/$file"
     done
@@ -264,6 +311,7 @@ main() {
     if [ "$migration" -eq 1 ]; then
       repo_backup="$shared_backup"
       [ ! -e "$repo_backup" ] && [ ! -L "$repo_backup" ] || fail "백업 경로가 이미 있습니다: $repo_backup"
+      legacy_carry "$REPO" "$target"
       mv "$REPO" "$repo_backup"
       if ! mv "$target" "$REPO"; then
         if [ ! -e "$REPO" ] && [ ! -L "$REPO" ]; then mv "$repo_backup" "$REPO"; fi
@@ -285,7 +333,8 @@ main() {
       fi
       before=$package_updated
       package_file "$source_directory/SKILL.md" "$dest/SKILL.md"
-      package_tree "$source_directory/assets/template" "$dest/assets/template"
+      package_tree "$source_directory/assets/scenarios" "$dest/assets/scenarios"
+      if [ -d "$source_directory/references" ]; then package_tree "$source_directory/references" "$dest/references"; fi
       if [ "$package_updated" -eq "$before" ]; then
         printf 'u%s: 이미 최신입니다.\n' "$number"
         unchanged=$((unchanged + 1))
@@ -296,6 +345,8 @@ main() {
     done
     printf '프로필 파일: 업데이트 %s개, 건너뜀 %s개.\n' "$package_updated" "$package_skipped"
     package_active=0
+    legacy_cleanup "$REPO" "$source_directory/references/legacy-template-sha256.tsv"
+    for account in "${accounts[@]}"; do legacy_cleanup "$account/skills/user/aside-automation-creator" "$source_directory/references/legacy-template-sha256.tsv"; done
     printf '\n완료: 설치/업데이트 %s개, 이미 최신 %s개. 새 Aside 채팅에서 사용하세요.\n' "$installed" "$unchanged"
     printf '공용 소스: %s\n' "$REPO"
     return
@@ -309,6 +360,7 @@ main() {
       git clone --branch main --single-branch "$URL" "$fresh"
       clear_tree "$fresh"
       check_source "$fresh"
+      legacy_carry "$REPO" "$fresh"
       mv "$REPO" "$repo_backup"
       if ! mv "$fresh" "$REPO"; then
         [ ! -e "$REPO" ] && [ ! -L "$REPO" ] || fail "새 저장소 배치 실패. 원본 백업: $repo_backup"
@@ -331,7 +383,10 @@ main() {
   local stage="$WORKDIR/skill" dest prepared backup='' installed=0 unchanged=0
   mkdir "$stage"
   cp "$REPO/SKILL.md" "$stage/"
-  cp -R "$REPO/assets" "$stage/"
+  mkdir "$stage/assets"
+  cp -R "$REPO/assets/scenarios" "$stage/assets/"
+  if [ -d "$REPO/references" ]; then cp -R "$REPO/references" "$stage/"; fi
+  find "$stage" -type f -name .DS_Store -exec rm -- {} \;
   clear_tree "$stage"
   local backup_root="$ASIDE_HOME/skill-backups/aside-automation-creator/$(date +%Y%m%d-%H%M%S)-$$"
   for account in "${accounts[@]}"; do
@@ -345,7 +400,9 @@ main() {
     ensure_dir "$account/skills/user"
     prepared="$WORKDIR/profile-$number"
     cp -R "$stage" "$prepared"
+    legacy_carry "$dest" "$prepared"
     clear_tree "$prepared"
+    if [ -d "$dest" ] && [ ! -L "$dest" ] && [ -z "$(find "$dest" -type l -print -quit)" ] && diff -qr "$prepared" "$dest" >/dev/null 2>&1; then unchanged=$((unchanged + 1)); continue; fi
     backup=''
     if [ -e "$dest" ] || [ -L "$dest" ]; then
       ensure_dir "$backup_root"
@@ -360,6 +417,8 @@ main() {
     if [ -n "$backup" ]; then printf '  이전 버전 백업: %s\n' "$backup"; fi
     installed=$((installed + 1))
   done
+  legacy_cleanup "$REPO" "$REPO/references/legacy-template-sha256.tsv"
+  for account in "${accounts[@]}"; do legacy_cleanup "$account/skills/user/aside-automation-creator" "$REPO/references/legacy-template-sha256.tsv"; done
   printf '\n완료: 설치/업데이트 %s개, 이미 최신 %s개. 새 Aside 채팅에서 사용하세요.\n' "$installed" "$unchanged"
   printf '공용 소스: %s\n' "$REPO"
 }

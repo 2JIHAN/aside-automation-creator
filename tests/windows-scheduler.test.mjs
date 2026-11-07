@@ -6,10 +6,10 @@ import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-const template = fileURLToPath(new URL('../assets/template/', import.meta.url));
+const template = fileURLToPath(new URL('../assets/scenarios/browser-monitor/template/', import.meta.url));
 const powershell = process.env.POWERSHELL_EXE || (process.platform === 'win32' ? 'powershell.exe' : 'pwsh');
 const available = spawnSync(powershell, ['-NoProfile', '-NonInteractive', '-Command', '$PSVersionTable.PSVersion.ToString()'], { encoding: 'utf8' }).status === 0;
-const cleaner = '/Users/seesoong/.aside/u/0/skills/user/quarantine-free-files/scripts/clear-quarantine.sh';
+const cleaner = process.env.ASIDE_CLEAR_QUARANTINE;
 function clean(paths) {
   if (process.platform !== 'darwin') return;
   const result = spawnSync('/bin/bash', [cleaner, ...paths], { encoding: 'utf8' });
@@ -18,7 +18,7 @@ function clean(paths) {
 
 test('scheduler scripts have Windows PowerShell 5.1-readable UTF8 BOM', () => {
   for (const file of ['install.ps1', 'uninstall.ps1']) {
-    assert.deepEqual([...readFileSync(join(template, file)).subarray(0, 3)], [239, 187, 191]);
+    assert.deepEqual([...readFileSync(join(template, 'maintenance', file)).subarray(0, 3)], [239, 187, 191]);
   }
 });
 
@@ -28,10 +28,10 @@ test('mocked scheduler installs, reinstalls and removes only its own interactive
   const scenario = join(root, "scenario's files");
   const home = join(root, 'home');
   const repo = join(root, 'shared repo');
-  for (const dir of [scenario, home, repo]) mkdirSync(dir, { recursive: true });
+  for (const dir of [join(scenario, 'maintenance'), home, repo]) mkdirSync(dir, { recursive: true });
   for (const file of ['install.ps1', 'uninstall.ps1']) {
-    const source = readFileSync(join(template, file), 'utf8').replaceAll('__AUTOMATION_SLUG__', 'scheduler-test').replaceAll('__AUTOMATION_NAME__', 'Friendly Test');
-    writeFileSync(join(scenario, file), source);
+    const source = readFileSync(join(template, 'maintenance', file), 'utf8').replaceAll('__AUTOMATION_SLUG__', 'scheduler-test').replaceAll('__AUTOMATION_NAME__', 'Friendly Test');
+    writeFileSync(join(scenario, 'maintenance', file), source);
   }
   for (const file of [join(scenario, 'run.ps1'), join(repo, 'engine.mjs'), join(root, 'node.exe'), join(root, 'aside.exe'), join(root, 'auth.json')]) writeFileSync(file, 'fixture');
   const harness = join(root, 'harness.ps1');
@@ -59,8 +59,8 @@ function New-ScheduledTask { param($Action,$Trigger,$Principal,$Settings,$Descri
 function Register-ScheduledTask { param($TaskName,$TaskPath,$InputObject,[switch]$Force,$ErrorAction) if ($global:FailRegister) { throw 'mock registration failure' }; $global:MockTask=$InputObject }
 function Unregister-ScheduledTask { param($TaskName,$TaskPath,$Confirm,$ErrorAction) $global:MockTask=$null }
 function Expect-Failure([scriptblock]$Block) { $Failed=$false; try { & $Block } catch { $Failed=$true }; Assert $Failed 'expected refusal' }
-$Install = Join-Path $env:TEST_SCENARIO 'install.ps1'
-$Uninstall = Join-Path $env:TEST_SCENARIO 'uninstall.ps1'
+$Install = Join-Path $env:TEST_SCENARIO 'maintenance/install.ps1'
+$Uninstall = Join-Path $env:TEST_SCENARIO 'maintenance/uninstall.ps1'
 $Before = Get-Date
 & $Install
 $After = Get-Date

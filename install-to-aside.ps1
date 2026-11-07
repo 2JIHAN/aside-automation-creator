@@ -44,9 +44,74 @@ function Assert-Source([string]$Path) {
     }
     $Assets = Join-Path $Path 'assets'
     if (-not (Test-Path -LiteralPath $Assets -PathType Container)) { throw 'Missing assets.' }
-    Assert-Tree $Assets
+    Assert-NoLink $Assets
+    Assert-Tree (Join-Path $Assets 'scenarios')
+    $References = Join-Path $Path 'references'
+    Assert-NoLink $References
+    if (Test-Path -LiteralPath $References) {
+        if (-not (Test-Path -LiteralPath $References -PathType Container)) { throw 'references must be a directory.' }
+        Assert-Tree $References
+    }
+    if ((Select-String -LiteralPath (Join-Path $Path 'SKILL.md') -SimpleMatch -CaseSensitive -Pattern 'references/file-writing-rules.md' -Quiet) -and
+        -not (Test-Path -LiteralPath (Join-Path $References 'file-writing-rules.md') -PathType Leaf)) { throw 'Missing references/file-writing-rules.md.' }
     if (-not (Select-String -LiteralPath (Join-Path $Path 'SKILL.md') -SimpleMatch -CaseSensitive -Pattern 'name: "aside-automation-creator"' -Quiet)) { throw 'Unexpected skill name.' }
 }
+function Assert-LegacyParents([string]$Path) {
+    while ($Path) { Assert-NoLink $Path; $Next = Split-Path -Parent $Path; if ($Next -eq $Path) { break }; $Path = $Next }
+}
+function Copy-LegacyItem([string]$Source, [string]$Target) {
+    $Item = Get-Item -LiteralPath $Source -Force
+    if ($Item.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+        if ($Item.LinkType -ne 'SymbolicLink') { throw "Cannot safely preserve reparse point: $Source" }
+        New-Item -ItemType SymbolicLink -Path $Target -Target $Item.Target -ErrorAction Stop | Out-Null
+    } elseif ($Item.PSIsContainer) {
+        Ensure-Directory $Target
+        foreach ($Child in Get-ChildItem -LiteralPath $Source -Force) { Copy-LegacyItem $Child.FullName (Join-Path $Target $Child.Name) }
+    } else { Copy-Item -LiteralPath $Source -Destination $Target }
+}
+function Copy-Legacy([string]$Source, [string]$Target) {
+    Assert-LegacyParents (Join-Path $Source 'assets')
+    $Old = Join-Path $Source 'assets/template'
+    if ($null -eq (Get-Item -LiteralPath $Old -Force -ErrorAction SilentlyContinue)) { return }
+    $New = Join-Path $Target 'assets/template'
+    Assert-LegacyParents (Join-Path $Target 'assets')
+    if ($null -ne (Get-Item -LiteralPath $New -Force -ErrorAction SilentlyContinue)) { throw 'New payload unexpectedly contains legacy template.' }
+    Ensure-Directory (Join-Path $Target 'assets')
+    Copy-LegacyItem $Old $New
+}
+function Clear-Legacy([string]$Root, [string]$Baseline) {
+    if (-not (Test-Path -LiteralPath $Baseline -PathType Leaf)) { return }
+    try { Assert-LegacyParents $Baseline; Assert-LegacyParents (Join-Path $Root 'assets/template') } catch { return }
+    foreach ($Line in Get-Content -LiteralPath $Baseline) {
+        if ($Line -notmatch '^([0-9a-f]{64})\t(assets/template/[^\\]+)$') { continue }
+        $Hash = $Matches[1]; $Relative = $Matches[2]
+        if ($Relative.Split('/') -contains '..' -or $Relative.Split('/') -contains '.') { continue }
+        $File = Join-Path $Root $Relative
+        try {
+            Assert-LegacyParents $File
+            $Before = Get-Item -LiteralPath $File -Force -ErrorAction Stop
+            if ($Before.PSIsContainer) { continue }
+            if ((Get-FileHash -LiteralPath $File -Algorithm SHA256).Hash -ine $Hash) { continue }
+            Assert-LegacyParents $File
+            $After = Get-Item -LiteralPath $File -Force
+            if ($Before.CreationTimeUtc -ne $After.CreationTimeUtc -or $Before.LastWriteTimeUtc -ne $After.LastWriteTimeUtc -or $Before.Length -ne $After.Length) { continue }
+            Remove-Item -LiteralPath $File -ErrorAction Stop
+        } catch { if (Test-Path -LiteralPath $File) { Write-Warning "Legacy file preserved: $File. $($_.Exception.Message)" } }
+    }
+    # Enumerate without following links and remove only empty directories.
+    function Remove-EmptyLegacy([string]$Directory) {
+        try {
+            Assert-LegacyParents $Directory
+            foreach ($Child in Get-ChildItem -LiteralPath $Directory -Force) {
+                if ($Child.PSIsContainer -and -not ($Child.Attributes -band [IO.FileAttributes]::ReparsePoint)) { Remove-EmptyLegacy $Child.FullName }
+            }
+            Assert-LegacyParents $Directory
+            if (@(Get-ChildItem -LiteralPath $Directory -Force).Count -eq 0) { [IO.Directory]::Delete($Directory) }
+        } catch { Write-Warning "Legacy directory preserved: $Directory. $($_.Exception.Message)" }
+    }
+    if (Test-Path -LiteralPath (Join-Path $Root 'assets/template') -PathType Container) { Remove-EmptyLegacy (Join-Path $Root 'assets/template') }
+}
+
 function Get-Fingerprint([string]$Path) {
     $Base = (Get-Item -LiteralPath $Path).FullName.TrimEnd([IO.Path]::DirectorySeparatorChar)
     $Lines = @(Get-ChildItem -LiteralPath $Path -Force -Recurse | Sort-Object FullName | ForEach-Object {
@@ -100,6 +165,7 @@ try {
                 -not (Select-String -LiteralPath $Owner -SimpleMatch -CaseSensitive -Pattern 'name: "aside-automation-creator"' -Quiet)) { throw 'Refusing an unrelated package destination.' }
             $RepoBackup = $Repository + '.backup-' + $Stamp
             if (Test-Path -LiteralPath $RepoBackup) { throw 'Backup already exists.' }
+            Copy-Legacy $Repository $Fresh
             Move-Item -LiteralPath $Repository -Destination $RepoBackup
         }
         try { Move-Item -LiteralPath $Fresh -Destination $Repository } catch {
@@ -120,6 +186,7 @@ try {
             Assert-Source $Fresh
             $RepoBackup = $Repository + '.backup-' + $Stamp
             if (Test-Path -LiteralPath $RepoBackup) { throw "Backup already exists: $RepoBackup" }
+            Copy-Legacy $Repository $Fresh
             Move-Item -LiteralPath $Repository -Destination $RepoBackup
             try { Move-Item -LiteralPath $Fresh -Destination $Repository } catch {
                 if (-not (Test-Path -LiteralPath $Repository)) { Move-Item -LiteralPath $RepoBackup -Destination $Repository }
@@ -132,7 +199,12 @@ try {
     $Stage = Join-Path $Work 'skill'
     Ensure-Directory $Stage
     Copy-Item -LiteralPath (Join-Path $Repository 'SKILL.md') -Destination $Stage
-    Copy-Item -LiteralPath (Join-Path $Repository 'assets') -Destination $Stage -Recurse
+    Ensure-Directory (Join-Path $Stage 'assets')
+    Copy-Item -LiteralPath (Join-Path $Repository 'assets/scenarios') -Destination (Join-Path $Stage 'assets') -Recurse
+    if (Test-Path -LiteralPath (Join-Path $Repository 'references') -PathType Container) {
+        Copy-Item -LiteralPath (Join-Path $Repository 'references') -Destination $Stage -Recurse
+    }
+    Get-ChildItem -LiteralPath $Stage -Recurse -Force -File -Filter '.DS_Store' | ForEach-Object { Remove-Item -LiteralPath $_.FullName -Force }
     $BackupRoot = Join-Path $AsideHome ('skill-backups/aside-automation-creator/' + $Stamp)
     $Installed = 0
     foreach ($Account in $Accounts) {
@@ -142,6 +214,8 @@ try {
         if (Test-SameSkill $Stage $Destination) { Write-Host "u$($Account.Name): already current"; continue }
         $Prepared = Join-Path $Work ('profile-' + $Account.Name)
         Copy-Item -LiteralPath $Stage -Destination $Prepared -Recurse
+        Copy-Legacy $Destination $Prepared
+        if (Test-SameSkill $Prepared $Destination) { Write-Host "u$($Account.Name): already current"; continue }
         $Backup = $null
         if ($null -ne (Get-Item -LiteralPath $Destination -Force -ErrorAction SilentlyContinue)) {
             Ensure-Directory $BackupRoot
@@ -156,6 +230,8 @@ try {
         Write-Host "u$($Account.Name): installed $Destination"
         if ($Backup) { Write-Host "Previous skill: $Backup" }
     }
+    Clear-Legacy $Repository (Join-Path $Repository 'references/legacy-template-sha256.tsv')
+    foreach ($Account in $Accounts) { Clear-Legacy (Join-Path $Account.FullName 'skills/user/aside-automation-creator') (Join-Path $Repository 'references/legacy-template-sha256.tsv') }
     Write-Host "Installed/updated: $Installed. Open a new Aside chat. Shared source: $Repository"
 } finally {
     if (Test-Path -LiteralPath $Work) { Remove-Item -LiteralPath $Work -Recurse -Force }

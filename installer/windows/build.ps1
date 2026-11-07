@@ -18,6 +18,20 @@ if ($NodeVersion -notmatch '^v\d+\.\d+\.\d+$') { throw 'NodeVersion must be an e
 $Version = $Version -replace '^v', ''
 if ($Version -notmatch '^\d+\.\d+\.\d+([-.][0-9A-Za-z.-]+)?$') { throw 'Version must be a release version.' }
 $Root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
+function Assert-ReferencesTree([string]$Path) {
+    $Item = Get-Item -LiteralPath $Path -Force
+    if ($Item.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw "Refusing references symlink or junction: $Path" }
+    if ($Item.PSIsContainer) {
+        foreach ($Child in Get-ChildItem -LiteralPath $Path -Force) { Assert-ReferencesTree $Child.FullName }
+    }
+}
+$References = Join-Path $Root 'references'
+if ($null -ne (Get-Item -LiteralPath $References -Force -ErrorAction SilentlyContinue)) {
+    Assert-ReferencesTree $References
+    if (-not (Test-Path -LiteralPath $References -PathType Container)) { throw 'references must be a directory.' }
+}
+if ((Select-String -LiteralPath (Join-Path $Root 'SKILL.md') -SimpleMatch -CaseSensitive -Pattern 'references/file-writing-rules.md' -Quiet) -and
+    -not (Test-Path -LiteralPath (Join-Path $References 'file-writing-rules.md') -PathType Leaf)) { throw 'Missing references/file-writing-rules.md.' }
 $OutputDirectory = [IO.Path]::GetFullPath($OutputDirectory)
 New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
 $Work = Join-Path ([IO.Path]::GetTempPath()) ('aside-setup-build-' + [guid]::NewGuid().ToString('N'))
@@ -28,6 +42,10 @@ try {
     foreach ($Name in @('engine.mjs', 'SKILL.md', 'README.md', 'install-to-aside.ps1', 'assets')) {
         Copy-Item -LiteralPath (Join-Path $Root $Name) -Destination $Payload -Recurse
     }
+    if (Test-Path -LiteralPath $References -PathType Container) {
+        Copy-Item -LiteralPath $References -Destination $Payload -Recurse
+    }
+    Get-ChildItem -LiteralPath $Payload -Recurse -Force -File -Filter '.DS_Store' | ForEach-Object { Remove-Item -LiteralPath $_.FullName -Force }
     $ArchiveName = "node-$NodeVersion-win-$Architecture.zip"
     $BaseUrl = "https://nodejs.org/dist/$NodeVersion"
     $Archive = Join-Path $Work $ArchiveName

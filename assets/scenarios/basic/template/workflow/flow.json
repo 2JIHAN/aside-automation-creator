@@ -1,0 +1,260 @@
+{
+  "contextFile": "workflow/context.md",
+  "startStep": "work",
+  "initialState": {
+    "업무상태": "미확인",
+    "알림상태": "미확인",
+    "현재턴결과": "미확인",
+    "학습계기": "없음",
+    "정리상태": "미확인",
+    "학습상태": "미실행",
+    "알림검토결과": "미실행"
+  },
+  "steps": {
+    "work": {
+      "stateKey": "업무상태",
+      "instructionFile": "workflow/steps/work.md",
+      "next": [
+        {
+          "when": {
+            "업무상태": "완료"
+          },
+          "step": "notify"
+        },
+        {
+          "when": {
+            "업무상태": "실패"
+          },
+          "step": "review"
+        }
+      ]
+    },
+    "review": {
+      "instructionFile": "workflow/steps/review.md",
+      "rememberCaller": true,
+      "next": [
+        {
+          "when": {
+            "현재턴결과": "재확인"
+          },
+          "step": "$caller"
+        },
+        {
+          "when": {
+            "현재턴결과": "해결불가"
+          },
+          "step": "notify"
+        }
+      ],
+      "stateKey": "학습계기"
+    },
+    "notify": {
+      "stateKey": "알림상태",
+      "instructionFile": "workflow/steps/notify.md",
+      "next": [
+        {
+          "when": {
+            "알림상태": "알림완료"
+          },
+          "step": "cleanup"
+        },
+        {
+          "when": {
+            "알림상태": "알림불가",
+            "알림검토결과": "미실행"
+          },
+          "step": "review-notify"
+        },
+        {
+          "when": {
+            "알림상태": "알림불가",
+            "알림검토결과": "재확인"
+          },
+          "step": "cleanup"
+        },
+        {
+          "when": {
+            "알림상태": "알림불가",
+            "알림검토결과": "해결불가"
+          },
+          "step": "cleanup"
+        }
+      ]
+    },
+    "review-notify": {
+      "instructionFile": "workflow/steps/review.md",
+      "rememberCaller": true,
+      "stateKey": "알림검토결과",
+      "next": [
+        {
+          "when": {
+            "현재턴결과": "재확인"
+          },
+          "step": "$caller"
+        },
+        {
+          "when": {
+            "현재턴결과": "해결불가"
+          },
+          "step": "cleanup"
+        }
+      ]
+    },
+    "cleanup": {
+      "instructionFile": "workflow/steps/cleanup.md",
+      "next": [
+        {
+          "when": {
+            "업무상태": "완료",
+            "알림상태": "알림완료",
+            "정리상태": "정리완료",
+            "학습계기": "없음",
+            "알림검토결과": "미실행"
+          },
+          "finishWithStatus": "ok"
+        },
+        {
+          "when": {
+            "업무상태": "완료",
+            "알림상태": "알림완료",
+            "정리상태": "정리완료",
+            "학습계기": "재확인"
+          },
+          "step": "learn"
+        },
+        {
+          "when": {
+            "업무상태": "완료",
+            "알림상태": "알림완료",
+            "정리상태": "정리완료",
+            "학습계기": "해결불가"
+          },
+          "step": "learn"
+        },
+        {
+          "when": {
+            "업무상태": "완료",
+            "알림상태": "알림완료",
+            "정리상태": "정리완료",
+            "학습계기": "후보시험"
+          },
+          "step": "learn"
+        },
+        {
+          "when": {
+            "업무상태": "완료",
+            "알림상태": "알림완료",
+            "정리상태": "정리완료",
+            "학습계기": "없음",
+            "알림검토결과": "재확인"
+          },
+          "step": "learn"
+        },
+        {
+          "when": {
+            "업무상태": "완료",
+            "알림상태": "알림완료",
+            "정리상태": "정리완료",
+            "학습계기": "없음",
+            "알림검토결과": "해결불가"
+          },
+          "step": "learn"
+        },
+        {
+          "when": {
+            "업무상태": "실패",
+            "알림상태": "알림완료",
+            "정리상태": "정리완료"
+          },
+          "step": "learn"
+        },
+        {
+          "when": {
+            "알림상태": "알림불가",
+            "정리상태": "정리완료"
+          },
+          "step": "learn"
+        },
+        {
+          "when": {
+            "정리상태": "정리불가"
+          },
+          "step": "learn"
+        }
+      ],
+      "stateKey": "정리상태"
+    },
+    "learn": {
+      "instructionFile": "workflow/steps/learn.md",
+      "stateKey": "학습상태",
+      "next": [
+        {
+          "when": {
+            "업무상태": "완료",
+            "알림상태": "알림완료",
+            "정리상태": "정리완료",
+            "학습상태": "학습완료"
+          },
+          "finishWithStatus": "ok"
+        },
+        {
+          "when": {
+            "업무상태": "완료",
+            "알림상태": "알림완료",
+            "정리상태": "정리완료",
+            "학습상태": "학습불가"
+          },
+          "finishWithStatus": "ok"
+        },
+        {
+          "when": {
+            "업무상태": "실패",
+            "알림상태": "알림완료",
+            "정리상태": "정리완료",
+            "학습상태": "학습완료"
+          },
+          "finishWithStatus": "handed_off"
+        },
+        {
+          "when": {
+            "업무상태": "실패",
+            "알림상태": "알림완료",
+            "정리상태": "정리완료",
+            "학습상태": "학습불가"
+          },
+          "finishWithStatus": "handed_off"
+        },
+        {
+          "when": {
+            "알림상태": "알림불가",
+            "정리상태": "정리완료",
+            "학습상태": "학습완료"
+          },
+          "finishWithStatus": "incomplete"
+        },
+        {
+          "when": {
+            "알림상태": "알림불가",
+            "정리상태": "정리완료",
+            "학습상태": "학습불가"
+          },
+          "finishWithStatus": "incomplete"
+        },
+        {
+          "when": {
+            "정리상태": "정리불가",
+            "학습상태": "학습완료"
+          },
+          "finishWithStatus": "incomplete"
+        },
+        {
+          "when": {
+            "정리상태": "정리불가",
+            "학습상태": "학습불가"
+          },
+          "finishWithStatus": "incomplete"
+        }
+      ]
+    }
+  }
+}

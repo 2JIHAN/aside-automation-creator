@@ -25,7 +25,7 @@ function main() {
     turns: [],
   };
   const folderName = run.startedAt.replace(/[:.]/g, "-") + "-" + process.pid;
-  run.runDir = path.join(root, "runtime/runs", folderName);
+  run.runDir = path.join(root, "runs", folderName);
   fs.mkdirSync(run.runDir, { recursive: true });
 
   let stepId = flow.startStep;

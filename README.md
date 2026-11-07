@@ -13,8 +13,8 @@ Aside에서 반복할 업무를 가르치고, 같은 순서로 다시 실행하�
 | 운영체제 | 파일 | CPU |
 | --- | --- | --- |
 | macOS 13.5 이상 | [DMG 다운로드](https://github.com/2JIHAN/aside-automation-creator/releases/latest) | Apple Silicon과 Intel 공용 |
-| Windows | [x64 Setup 다운로드](https://github.com/2JIHAN/aside-automation-creator/releases/tag/v0.2.2) | Intel 또는 AMD |
-| Windows | [ARM64 Setup 다운로드](https://github.com/2JIHAN/aside-automation-creator/releases/tag/v0.2.2) | Windows ARM |
+| Windows | [x64 Setup 다운로드](https://github.com/2JIHAN/aside-automation-creator/releases/latest) | Intel 또는 AMD |
+| Windows | [ARM64 Setup 다운로드](https://github.com/2JIHAN/aside-automation-creator/releases/latest) | Windows ARM |
 
 macOS에서는 DMG 안의 앱을 열고 **앱 설치**를 누릅니다. 앱은 `~/Applications/Aside Automation Creator.app`에 설치되고 메뉴 막대에서 실행됩니다. 로그인 시 실행과 자동 업데이트가 기본으로 켜집니다. 앱이 시작될 때 조용히 버전을 확인하고, 새 버전이 있을 때만 업데이트 권장 창을 띄웁니다. 평소의 정기 확인은 백그라운드에서 수행합니다. **메뉴 막대에 표시**를 끄면 아이콘을 숨길 수 있습니다. 숨긴 뒤에는 Finder나 Spotlight에서 앱을 다시 열어 설정합니다. 기존에 선택한 업데이트 설정은 유지합니다.
 
@@ -112,8 +112,8 @@ Unblock-File -LiteralPath $installer
 
 ```powershell
 .\run.ps1             # 실제 업무 1회 실행
-.\install.ps1 -Minute 30  # 매시 30분 예약, 즉시 실행하지 않음
-.\uninstall.ps1       # 이 자동화의 예약만 제거
+.\maintenance\install.ps1 -Minute 30  # 매시 30분 예약, 즉시 실행하지 않음
+.\maintenance\uninstall.ps1       # 이 자동화의 예약만 제거
 ```
 
 예약은 로그인한 사용자의 제한된 권한으로 실행됩니다. Windows에 로그인하고 Aside와 필요한 사이트의 로그인 상태를 유지합니다. 사용자 암호를 저장하거나 SYSTEM 작업으로 등록하지 않습니다. 중복 실행은 건너뜁니다. 예약 분은 PC의 시스템 시간대를 따르며 업무의 TZ 설정과 별개입니다.
@@ -123,3 +123,9 @@ Unblock-File -LiteralPath $installer
 Windows PowerShell 5.1에서 한글 경로와 자동화 이름이 깨지지 않게 `.ps1` 파일은 UTF-8 BOM을 유지합니다.
 
 </details>
+
+## 자동화 제작 문서
+
+- [제작 순서](SKILL.md)
+- [파일 작성 규약](references/file-writing-rules.md)
+- [시나리오 유형과 기본 뼈대](assets/scenarios/index.md)

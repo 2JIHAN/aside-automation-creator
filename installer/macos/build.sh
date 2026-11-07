@@ -6,6 +6,14 @@ OUT=${2:?Output directory required}
 VERSION=${3:-0.0.0}
 [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]] || exit 1
 ROOT=$(cd "$(dirname "$0")/../.." && pwd -P)
+[ ! -L "$ROOT/assets/scenarios" ] && [ -d "$ROOT/assets/scenarios" ] && [ -z "$(find "$ROOT/assets/scenarios" -type l -print -quit)" ] || { echo 'Refusing invalid scenarios tree.' >&2; exit 1; }
+[ ! -L "$ROOT/references" ] || { echo 'Refusing references symlink.' >&2; exit 1; }
+if [ -e "$ROOT/references" ]; then
+  [ -d "$ROOT/references" ] && [ -z "$(find "$ROOT/references" -type l -print -quit)" ] || { echo 'Refusing invalid references tree.' >&2; exit 1; }
+fi
+if grep -Fq 'references/file-writing-rules.md' "$ROOT/SKILL.md"; then
+  [ -f "$ROOT/references/file-writing-rules.md" ] || { echo 'Missing references/file-writing-rules.md.' >&2; exit 1; }
+fi
 mkdir -p "$OUT"
 OUT=$(cd "$OUT" && pwd -P)
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/aac-macos-build.XXXXXX")
@@ -15,8 +23,10 @@ RES="$APP/Contents/Resources"
 mkdir -p "$APP/Contents/MacOS" "$RES/payload" "$RES/cli" "$RES/runtime" "$WORK/icon.iconset"
 for item in SKILL.md engine.mjs README.md install-to-aside.sh; do /bin/cp "$ROOT/$item" "$RES/payload/"; done
 mkdir -p "$RES/payload/assets"
-/bin/cp -R "$ROOT/assets/template" "$RES/payload/assets/"
+/bin/cp -R "$ROOT/assets/scenarios" "$RES/payload/assets/"
+if [ -d "$ROOT/references" ]; then /bin/cp -R "$ROOT/references" "$RES/payload/"; fi
 /bin/cp "$ROOT/installer/macos/bootstrap.sh" "$ROOT/installer/macos/adopt-app.sh" "$RES/"
+find "$RES/payload" -type f -name .DS_Store -delete
 SPARKLE_VERSION=2.10.1
 SPARKLE_SHA256=1a856d2a9edb8e628de88121d7be04cf0e2167f8641650b78fca00b14244cf27
 SPARKLE_DIR=${SPARKLE_DISTRIBUTION_DIR:-"$WORK/sparkle"}

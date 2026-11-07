@@ -4,6 +4,9 @@ on:
   push:
     tags: ['v*']
     paths:
+      - 'SKILL.md'
+      - 'references/**'
+      - 'assets/scenarios/**'
       - '**/*.mjs'
       - '**/*.ps1'
       - '**/*.sh'
@@ -12,6 +15,9 @@ on:
       - '.github/workflows/windows-release.yml'
   pull_request:
     paths:
+      - 'SKILL.md'
+      - 'references/**'
+      - 'assets/scenarios/**'
       - '**/*.mjs'
       - '**/*.ps1'
       - '**/*.sh'
@@ -128,7 +134,7 @@ jobs:
         with:
           node-version: '26'
       - name: Test macOS package installation without real profiles
-        run: ASIDE_AUTOMATION_CREATOR_REPO="$PWD" node --test assets/template/tests/scenario.test.mjs tests/install-to-aside.test.mjs tests/macos-*.test.mjs
+        run: ASIDE_AUTOMATION_CREATOR_REPO="$PWD" node --test assets/scenarios/*/template/maintenance/tests/*.test.mjs tests/engine/*.test.mjs tests/authoring-documents.test.mjs tests/release-content.test.mjs tests/install-to-aside.test.mjs tests/macos-*.test.mjs
       - name: Build universal macOS installer for review
         env:
           RELEASE_REF: ${{ github.ref_name }}

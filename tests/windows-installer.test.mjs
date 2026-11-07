@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
 const installer = fileURLToPath(new URL('../install-to-aside.ps1', import.meta.url));
-const cleaner = '/Users/seesoong/.aside/u/0/skills/user/quarantine-free-files/scripts/clear-quarantine.sh';
+const cleaner = process.env.ASIDE_CLEAR_QUARANTINE;
 const pwsh = [process.env.POWERSHELL_EXE, 'pwsh', 'powershell.exe'].filter(Boolean).find(exe => spawnSync(exe, ['-NoProfile', '-NonInteractive', '-Command', 'exit 0']).status === 0);
 const options = { skip: !pwsh && 'PowerShell is not available; set POWERSHELL_EXE' };
 const remote = 'https://github.com/2JIHAN/aside-automation-creator.git';
@@ -33,7 +33,7 @@ function fixture(t) {
   const log = join(root, 'git.jsonl');
   const wrapper = join(root, 'mock.ps1');
   for (const profile of ['0', '1', '12', 'not-numeric']) mkdirSync(join(aside, 'u', profile), { recursive: true });
-  for (const [file, content] of [['SKILL.md', '---\nname: "aside-automation-creator"\n---\nfixture skill'], ['engine.mjs', '// fixture engine'], ['assets/template/marker.txt', 'template'], ['README.md', 'not installed'], ['tests/private.txt', 'not installed']]) put(join(source, file), content);
+  for (const [file, content] of [['SKILL.md', '---\nname: "aside-automation-creator"\n---\nfixture skill'], ['engine.mjs', '// fixture engine'], ['assets/scenarios/browser-monitor/template/marker.txt', 'template'], ['README.md', 'not installed'], ['tests/private.txt', 'not installed']]) put(join(source, file), content);
   put(wrapper, `﻿function global:git {
   $a = @($args)
   ConvertTo-Json -Compress -InputObject $a | Add-Content -LiteralPath $env:MOCK_LOG
@@ -73,7 +73,7 @@ function success(result) { assert.equal(result.status, 0, result.stdout + result
 function installed(f) {
   for (const n of [0, 1, 12]) {
     assert.deepEqual(readdirSync(f.dest(n)).sort(), ['SKILL.md', 'assets']);
-    assert.equal(readFileSync(join(f.dest(n), 'assets/template/marker.txt'), 'utf8'), 'template');
+    assert.equal(readFileSync(join(f.dest(n), 'assets/scenarios/browser-monitor/template/marker.txt'), 'utf8'), 'template');
   }
   assert.equal(existsSync(join(f.aside, 'u/not-numeric/skills')), false);
 }
@@ -239,3 +239,68 @@ test('Windows package installer preserves existing data on invalid payload or un
     assert.deepEqual(readdirSync(f.aside).filter(name => name.startsWith('.automation-creator-install.')), []);
   }
 });
+
+for (const mode of ['git', 'package']) {
+  test(`Windows ${mode} copies references to shared source and every temporary profile`, options, t => {
+    const f = fixture(t);
+    put(join(f.source, 'SKILL.md'), '---\nname: "aside-automation-creator"\n---\nRead references/file-writing-rules.md\n');
+    put(join(f.source, 'references/file-writing-rules.md'), 'fixture contract');
+    put(join(f.source, 'references/nested/extra.md'), 'fixture extra');
+    const args = mode === 'package' ? ['-SourceDirectory', f.source] : [];
+    success(f.run({}, true, args));
+    for (const dest of [f.repo, ...[0, 1, 12].map(f.dest)]) {
+      assert.equal(readFileSync(join(dest, 'references/file-writing-rules.md'), 'utf8'), 'fixture contract');
+      assert.equal(readFileSync(join(dest, 'references/nested/extra.md'), 'utf8'), 'fixture extra');
+    }
+  });
+  for (const invalid of ['missing contract', 'linked root', 'linked child']) {
+    test(`Windows ${mode} refuses references ${invalid} before profile writes`, options, t => {
+      const f = fixture(t);
+      put(join(f.source, 'SKILL.md'), '---\nname: "aside-automation-creator"\n---\nRead references/file-writing-rules.md\n');
+      const outside = join(f.root, 'outside');
+      put(join(outside, 'file-writing-rules.md'), 'outside unchanged');
+      if (invalid !== 'missing contract') {
+        const link = invalid === 'linked root' ? join(f.source, 'references') : join(f.source, 'references/nested');
+        if (invalid === 'linked child') put(join(f.source, 'references/file-writing-rules.md'), 'fixture contract');
+        try { symlinkSync(outside, link, process.platform === 'win32' ? 'junction' : 'dir'); }
+        catch (error) { if (error.code === 'EPERM') { t.skip('Symlink privilege unavailable'); return; } throw error; }
+      }
+      const beforeProfiles = tree(join(f.aside, 'u')), beforeOutside = tree(outside);
+      const result = f.run({}, true, mode === 'package' ? ['-SourceDirectory', f.source] : []);
+      assert.notEqual(result.status, 0, result.stdout + result.stderr);
+      assert.deepEqual(tree(join(f.aside, 'u')), beforeProfiles);
+      assert.deepEqual(tree(outside), beforeOutside);
+    });
+  }
+}
+
+test('Windows package recursively includes basic, index and arbitrary future scenario types', options, t => {
+  const f=fixture(t);
+  const additions=['assets/scenarios/index.md','assets/scenarios/basic/template/workflow/flow.json','assets/scenarios/future-type/guide.md','assets/scenarios/future-type/template/new.txt','assets/scenarios/future-type/examples/new.md'];
+  for(const file of additions) put(join(f.source,file),'content '+file);
+  put(join(f.source,'runtime/node.exe'),'bundled fixture');
+  success(f.run({MOCK_GIT_FORBIDDEN:'1'}, true, ['-SourceDirectory', f.source]));
+  assert.equal(existsSync(f.log),false);
+  for(const file of additions) for(const dest of [f.repo,...[0,1,12].map(f.dest)]) assert.equal(readFileSync(join(dest,file),'utf8'),'content '+file);
+});
+
+for (const baseline of ['released', 'missing', 'unknown']) {
+  test('Windows legacy cleanup preserves modified and added files with ' + baseline + ' baseline', options, t => {
+    const f = fixture(t);
+
+    if (baseline !== 'missing') put(join(f.source, 'references/legacy-template-sha256.tsv'), baseline === 'released' ? "1977dda405ee9e4e0dad1dcd031ab57af1fe298de98ee99f91640b08cfe199be\tassets/template/workflow/flow.json\n228d2e9459173ac0509a3e53b10ecfe621cf61962f24cae0d54f15af707e5771\tassets/template/.gitignore\n732689ce7f0172c293bd178fd7d1057cc3c9b481233bf2b66e896b332e2783ba\tassets/template/memory.md\n7b8b38a85d3b2c610f73162f1abd8bce399ed7b6cb0549c9936817fe9f6164cd\tassets/template/workflow/steps/close-tabs.md\n81c19b4fdb6b7995667733f33739223ff4a7d5c5c8a869f680239d8a453e057e\tassets/template/install.sh\n8af253339907afc6630516a63cfe4e2c741183c1f3881e3afae4b9fe41ad7733\tassets/template/workflow/steps/work.md\n8e8134c51e92bfb941d11d2feb5cb2183dfa6526994018e19e844e44324a0507\tassets/template/run.sh\n9feaaf1601e181c1627640c68506a0178ada5f81b3ec2ce62fa5d5ac2cb68577\tassets/template/install.ps1\nb404ea3345660e5846547ce282efae59b8a7082baf4a9a821f481903c645216f\tassets/template/uninstall.sh\nd02afdbee617e40e5a29752c1269575f0b58a4be5b343e9ac5254da426cf16bb\tassets/template/uninstall.ps1\nd9509e20121bcce84bff2af32f05e1ca726da71d5023d0282ffe26a814d98d71\tassets/template/workflow/steps/review.md\ndc23083081e5031f492e626bd2810408656c665ef6a3d2e84651953d565b48f8\tassets/template/tests/scenario.test.mjs\nf37283f64303a6c676a41dd66fd666e31c6c8d28ccda5e5fff93998ea62cada8\tassets/template/workflow/steps/learn.md\nfa5b38c3484f93d38ee6a7072a6bcd8c086b7d0e124f3c1f3375e6b61743c7b1\tassets/template/workflow/context.md\nfb61c02b4c019cbbe7cd5f12743b7fef1c90063e77af6fc64105e24b3b2e3a24\tassets/template/workflow/steps/notify.md\nff415f1dde48bc6259a3043c9d45b977e34d7ec53fcf06b42b1feb1fbaca5d4f\tassets/template/run.ps1\n" : '0'.repeat(64) + '\tassets/template/.gitignore\n');
+    const run = () => f.run({}, true, ['-SourceDirectory', f.source]);
+    success(run());
+    for (const dest of [f.repo, f.dest(0)]) {
+      put(join(dest, 'assets/template/.gitignore'), 'runtime/\n.DS_Store\n');
+      put(join(dest, 'assets/template/memory.md'), 'user modified');
+      put(join(dest, 'assets/template/custom.txt'), 'user added');
+    }
+    success(run());
+    for (const dest of [f.repo, f.dest(0)]) {
+      assert.equal(existsSync(join(dest, 'assets/template/.gitignore')), baseline !== 'released');
+      assert.equal(readFileSync(join(dest, 'assets/template/memory.md'), 'utf8'), 'user modified');
+      assert.equal(readFileSync(join(dest, 'assets/template/custom.txt'), 'utf8'), 'user added');
+    }
+  });
+}

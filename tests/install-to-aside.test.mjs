@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
 const installer = fileURLToPath(new URL('../install-to-aside.sh', import.meta.url));
-const cleaner = '/Users/seesoong/.aside/u/0/skills/user/quarantine-free-files/scripts/clear-quarantine.sh';
+const cleaner = process.env.ASIDE_CLEAR_QUARANTINE;
 const darwin = process.platform === 'darwin';
 const url = 'https://github.com/2JIHAN/aside-automation-creator.git';
 const skill = 'aside-automation-creator';
@@ -37,7 +37,7 @@ function fixture(t) {
   for (const n of [0, 1, 2]) mkdirSync(join(aside, 'u', String(n)), { recursive: true });
   put(join(source, 'SKILL.md'), payload);
   put(join(source, 'engine.mjs'), '// shared engine fixture\n');
-  put(join(source, 'assets', 'template', 'marker.txt'), 'template marker\n');
+  put(join(source, 'assets', 'scenarios', 'browser-monitor', 'template', 'marker.txt'), 'template marker\n');
   put(join(source, 'README.md'), 'must not be installed\n');
   put(join(source, 'install-to-aside.sh'), 'must not be installed\n');
   put(join(source, 'tests', 'private.txt'), 'must not be installed\n');
@@ -94,7 +94,7 @@ function success(result) {
 function installed(f, n) {
   assert.deepEqual(readdirSync(f.dest(n)).sort(), ['SKILL.md', 'assets']);
   assert.equal(readFileSync(join(f.dest(n), 'SKILL.md'), 'utf8'), payload);
-  assert.equal(readFileSync(join(f.dest(n), 'assets/template/marker.txt'), 'utf8'), 'template marker\n');
+  assert.equal(readFileSync(join(f.dest(n), 'assets/scenarios/browser-monitor/template/marker.txt'), 'utf8'), 'template marker\n');
 }
 
 function tree(path) {
@@ -190,7 +190,7 @@ for (const parent of ['skills', 'skills/user']) {
 
 test('Darwin clears quarantine from copied readonly payload while preserving mode and other attributes', { skip: !darwin }, t => {
   const f = fixture(t);
-  const marker = join(f.source, 'assets/template/marker.txt');
+  const marker = join(f.source, 'assets/scenarios/browser-monitor/template/marker.txt');
   for (const [name, value] of [['com.apple.quarantine', '0081;00000000;Aside;'], ['test.aside.preserve', 'keep']]) {
     const result = spawnSync('/usr/bin/xattr', ['-w', name, value, marker], { encoding: 'utf8' });
     assert.equal(result.status, 0, result.stderr);
@@ -202,7 +202,7 @@ test('Darwin clears quarantine from copied readonly payload while preserving mod
   chmodSync(rootSkill, 0o444);
   success(f.run());
   for (const n of [0, 1, 2]) {
-    const copied = join(f.dest(n), 'assets/template/marker.txt');
+    const copied = join(f.dest(n), 'assets/scenarios/browser-monitor/template/marker.txt');
     assert.equal(statSync(copied).mode & 0o777, 0o444);
     const installedSkill = join(f.dest(n), 'SKILL.md');
     assert.equal(statSync(installedSkill).mode & 0o777, 0o444);
@@ -234,9 +234,9 @@ test('dirty source is renamed intact and replaced with a fresh clone', t => {
   put(join(f.repo, 'engine.mjs'), '// local development\n');
   put(join(f.repo, 'untracked.txt'), 'keep untracked work\n');
   put(join(f.repo, '.git/local-state'), 'keep git state\n');
-  rmSync(join(f.repo, 'assets/template/marker.txt'));
+  rmSync(join(f.repo, 'assets/scenarios/browser-monitor/template/marker.txt'));
   const before = tree(f.repo);
-  const result = f.run({ FAKE_DIRTY: ' M engine.mjs\n D assets/template/marker.txt\n?? untracked.txt\n' });
+  const result = f.run({ FAKE_DIRTY: ' M engine.mjs\n D assets/scenarios/browser-monitor/template/marker.txt\n?? untracked.txt\n' });
   success(result);
   const backups = readdirSync(f.root).filter(name => name.startsWith('source.backup-'));
   assert.equal(backups.length, 1);
@@ -351,12 +351,12 @@ test('package engine-only update leaves no backup and leaves profiles and runtim
 
 test('package template-only update changes shared source and profiles without permanent backups', t => {
   const f=fixture(t); packageSource(f); success(packageRun(f));
-  put(join(f.source,'assets/template/marker.txt'),'new template\n');
+  put(join(f.source,'assets/scenarios/browser-monitor/template/marker.txt'),'new template\n');
   const result=packageRun(f); success(result);
   assert.deepEqual(repoBackups(f), []);
   assert.equal(existsSync(join(f.aside,'skill-backups')),false);
-  assert.equal(readFileSync(join(f.repo,'assets/template/marker.txt'),'utf8'),'new template\n');
-  for (const n of [0,1,2]) assert.equal(readFileSync(join(f.dest(n),'assets/template/marker.txt'),'utf8'),'new template\n');
+  assert.equal(readFileSync(join(f.repo,'assets/scenarios/browser-monitor/template/marker.txt'),'utf8'),'new template\n');
+  for (const n of [0,1,2]) assert.equal(readFileSync(join(f.dest(n),'assets/scenarios/browser-monitor/template/marker.txt'),'utf8'),'new template\n');
   assert.match(result.stdout,/프로필 파일: 업데이트 3개, 건너뜀 3개/);
   noPackageDebris(f);
 });
@@ -423,9 +423,9 @@ test('source package recognizes expected local Git origin without invoking Git',
 for (const target of ['shared', 'profile']) {
   test('package failed per-file promotion keeps old '+target+' file intact and signals failure', t => {
     const f=fixture(t); packageSource(f); success(packageRun(f));
-    const dest=target==='shared' ? join(f.repo,'engine.mjs') : join(f.dest(0),'assets/template/marker.txt');
+    const dest=target==='shared' ? join(f.repo,'engine.mjs') : join(f.dest(0),'assets/scenarios/browser-monitor/template/marker.txt');
     const original=readFileSync(dest,'utf8'), before=identity(dest);
-    put(join(f.source,target==='shared' ? 'engine.mjs' : 'assets/template/marker.txt'),'replacement\n');
+    put(join(f.source,target==='shared' ? 'engine.mjs' : 'assets/scenarios/browser-monitor/template/marker.txt'),'replacement\n');
     put(join(f.bin,'mv'),'#!/bin/bash\nfor arg in "$@"; do [ "$arg" != "'+dest+'" ] || exit 97; done\nexec /bin/mv "$@"\n');
     chmodSync(join(f.bin,'mv'),0o755); clean(join(f.bin,'mv'));
     const result=packageRun(f); assert.notEqual(result.status,0);
@@ -442,7 +442,7 @@ for (const area of ['shared', 'profile']) {
   test('package refuses nested '+area+' destination symlink ancestors without target writes', t => {
     const f=fixture(t); packageSource(f); success(packageRun(f));
     const outside=join(f.root,'outside'); put(join(outside,'marker.txt'),'keep');
-    const parent=area==='shared' ? join(f.repo,'assets/template') : join(f.dest(0),'assets/template');
+    const parent=area==='shared' ? join(f.repo,'assets/scenarios/browser-monitor/template') : join(f.dest(0),'assets/scenarios/browser-monitor/template');
     rmSync(parent,{recursive:true}); symlinkSync(outside,parent);
     const before=tree(outside); const result=packageRun(f);
     assert.notEqual(result.status,0); assert.match(result.stderr,/심볼릭 링크/);
@@ -519,9 +519,9 @@ for (const action of ['failure','noop','wrong mode']) {
     const originalMode=statSync(join(f.repo,'engine.mjs')).mode;
     put(join(f.source,'engine.mjs'),'changed engine\n'); chmodSync(join(f.source,'engine.mjs'),0o444);
     put(join(f.source,'SKILL.md'),payload+'changed skill\n');
-    put(join(f.source,'assets/template/new/nested.txt'),'new file\n');
-    put(join(f.source,'assets/template/marker.txt'),'changed template\n');
-    const dest=join(f.dest(2),'assets/template/marker.txt');
+    put(join(f.source,'assets/scenarios/browser-monitor/template/new/nested.txt'),'new file\n');
+    put(join(f.source,'assets/scenarios/browser-monitor/template/marker.txt'),'changed template\n');
+    const dest=join(f.dest(2),'assets/scenarios/browser-monitor/template/marker.txt');
     const flag=join(f.root,'injected');
     const effect=action==='failure' ? 'exit 97' : action==='noop' ? 'exit 0' : '/bin/mv "$@"; chmod 600 "'+dest+'"; exit 0';
     moveShim(f,'if [ "${!#}" = "'+dest+'" ] && [ ! -e "'+flag+'" ]; then touch "'+flag+'"; '+effect+'; fi');
@@ -537,7 +537,7 @@ test('first package install failure removes only transaction files and empty dir
   const f=fixture(t); packageSource(f);
   put(join(f.dest(1),'unknown.txt'),'keep profile');
   const profiles=tree(join(f.aside,'u'));
-  const dest=join(f.dest(2),'assets/template/marker.txt');
+  const dest=join(f.dest(2),'assets/scenarios/browser-monitor/template/marker.txt');
   moveShim(f,'[ "${!#}" != "'+dest+'" ] || exit 97');
   const result=packageRun(f); assert.notEqual(result.status,0);
   assert.doesNotMatch(result.stdout,/완료: 설치/);
@@ -547,9 +547,9 @@ test('first package install failure removes only transaction files and empty dir
 
 test('rollback failure retains recovery copies and reports their location', t => {
   const f=fixture(t); packageSource(f); success(packageRun(f));
-  const engine=join(f.repo,'engine.mjs'), dest=join(f.dest(2),'assets/template/marker.txt');
+  const engine=join(f.repo,'engine.mjs'), dest=join(f.dest(2),'assets/scenarios/browser-monitor/template/marker.txt');
   put(join(f.source,'engine.mjs'),'changed engine\n');
-  put(join(f.source,'assets/template/marker.txt'),'changed template\n');
+  put(join(f.source,'assets/scenarios/browser-monitor/template/marker.txt'),'changed template\n');
   const flag=join(f.root,'injected');
   moveShim(f,'if [ "${!#}" = "'+dest+'" ]; then touch "'+flag+'"; exit 97; fi\nif [ -e "'+flag+'" ] && [ "${!#}" = "'+engine+'" ]; then exit 98; fi');
   const result=packageRun(f); assert.notEqual(result.status,0);
@@ -562,13 +562,13 @@ test('rollback failure retains recovery copies and reports their location', t =>
 
 test('failed install preserves unrelated files introduced inside new transaction directories', t => {
   const f=fixture(t); packageSource(f);
-  const dest=join(f.dest(2),'assets/template/marker.txt');
-  const userFile=join(f.dest(2),'assets/template/user-note.txt');
+  const dest=join(f.dest(2),'assets/scenarios/browser-monitor/template/marker.txt');
+  const userFile=join(f.dest(2),'assets/scenarios/browser-monitor/template/user-note.txt');
   moveShim(f,'if [ "${!#}" = "'+dest+'" ]; then printf "keep new user file" > "'+userFile+'"; exit 97; fi');
   const result=packageRun(f); assert.notEqual(result.status,0);
   assert.equal(existsSync(f.repo),false);
   assert.equal(readFileSync(userFile,'utf8'),'keep new user file');
-  assert.deepEqual(files(f.dest(2)),['assets/template/user-note.txt']);
+  assert.deepEqual(files(f.dest(2)),['assets/scenarios/browser-monitor/template/user-note.txt']);
   for (const n of [0,1]) assert.equal(existsSync(f.dest(n)),false);
   noPackageDebris(f);
 });
@@ -583,4 +583,143 @@ test('failed install never removes a destination created by another writer', t =
   assert.equal(existsSync(join(f.repo,'SKILL.md')),false);
   assert.deepEqual(repoBackups(f),[]);
   assert.equal(existsSync(join(f.aside,'skill-backups')),false);
+});
+
+for (const mode of ['git', 'package']) {
+  test(`${mode} copies references to the shared source and every temporary profile`, t => {
+    const f = fixture(t);
+    if (mode === 'package') packageSource(f);
+    put(join(f.source, 'SKILL.md'), payload + '\nRead references/file-writing-rules.md\n');
+    put(join(f.source, 'references/file-writing-rules.md'), 'fixture contract\n');
+    put(join(f.source, 'references/nested/extra.md'), 'fixture extra\n');
+    clean(f.source);
+    success(mode === 'package' ? packageRun(f) : f.run());
+    for (const dest of [f.repo, ...[0, 1, 2].map(f.dest)]) {
+      assert.equal(readFileSync(join(dest, 'references/file-writing-rules.md'), 'utf8'), 'fixture contract\n');
+      assert.equal(readFileSync(join(dest, 'references/nested/extra.md'), 'utf8'), 'fixture extra\n');
+    }
+  });
+  for (const invalid of ['missing contract', 'linked root', 'linked child', 'broken root']) {
+    test(`${mode} refuses references ${invalid} before writing profiles`, t => {
+      const f = fixture(t);
+      if (mode === 'package') packageSource(f);
+      put(join(f.source, 'SKILL.md'), payload + '\nRead references/file-writing-rules.md\n');
+      const outside = join(f.root, 'outside');
+      put(join(outside, 'file-writing-rules.md'), 'outside unchanged\n');
+      if (invalid === 'linked root') symlinkSync(outside, join(f.source, 'references'));
+      if (invalid === 'broken root') symlinkSync(join(f.root, 'missing'), join(f.source, 'references'));
+      if (invalid === 'linked child') {
+        put(join(f.source, 'references/file-writing-rules.md'), 'fixture contract\n');
+        symlinkSync(outside, join(f.source, 'references/nested'));
+      }
+      clean(f.source);
+      const beforeProfiles = tree(join(f.aside, 'u')), beforeOutside = tree(outside);
+      const result = mode === 'package' ? packageRun(f) : f.run();
+      assert.notEqual(result.status, 0, result.stdout + result.stderr);
+      assert.deepEqual(tree(join(f.aside, 'u')), beforeProfiles);
+      assert.deepEqual(tree(outside), beforeOutside);
+    });
+  }
+}
+
+for (const invalid of [false, 'missing contract', 'linked root', 'linked child']) {
+  test(`macOS build payload ${invalid || 'includes references'} without downloading or running an app`, { skip: !darwin }, t => {
+    const f = fixture(t);
+    const build = readFileSync(new URL('../installer/macos/build.sh', import.meta.url), 'utf8');
+    const prefix = build.substring(0, build.indexOf('SPARKLE_VERSION='));
+    assert.ok(prefix.includes('/payload/'), 'execute the real payload staging prefix');
+    const script = join(f.source, 'installer/macos/build.sh');
+    put(script, prefix + '\n/bin/cp -R "$RES/payload" "$OUT/staged-payload"\n');
+    put(join(f.source, 'installer/macos/bootstrap.sh'), '# fixture\n');
+    put(join(f.source, 'installer/macos/adopt-app.sh'), '# fixture\n');
+    put(join(f.source, 'SKILL.md'), payload + '\nRead references/file-writing-rules.md\n');
+    if (invalid !== 'missing contract') {
+      put(join(f.source, 'references/file-writing-rules.md'), 'fixture contract\n');
+      put(join(f.source, 'references/nested/extra.md'), 'fixture extra\n');
+    }
+    const outside = join(f.root, 'outside');
+    put(join(outside, 'file-writing-rules.md'), 'outside unchanged\n');
+    if (invalid === 'linked root') {
+      rmSync(join(f.source, 'references'), { recursive: true });
+      symlinkSync(outside, join(f.source, 'references'));
+    }
+    if (invalid === 'linked child') symlinkSync(outside, join(f.source, 'references/link'));
+    clean(f.source);
+    const out = join(f.root, 'build-output');
+    const result = spawnSync('/bin/bash', [script, '--build', out], { encoding: 'utf8', timeout: 20000 });
+    if (invalid) {
+      assert.notEqual(result.status, 0, result.stdout + result.stderr);
+      assert.equal(existsSync(join(out, 'staged-payload')), false);
+    } else {
+      success(result);
+      assert.equal(readFileSync(join(out, 'staged-payload/references/file-writing-rules.md'), 'utf8'), 'fixture contract\n');
+      assert.equal(readFileSync(join(out, 'staged-payload/references/nested/extra.md'), 'utf8'), 'fixture extra\n');
+      clean(out);
+    }
+    assert.equal(readFileSync(join(outside, 'file-writing-rules.md'), 'utf8'), 'outside unchanged\n');
+  });
+}
+
+test('package installs all scenario types, index, guides and future additions without fixed type names', t => {
+  const f=fixture(t); packageSource(f);
+  const additions=['assets/scenarios/index.md','assets/scenarios/basic/template/workflow/flow.json','assets/scenarios/basic/guide.md','assets/scenarios/future-type/guide.md','assets/scenarios/future-type/template/new.txt','assets/scenarios/future-type/examples/new.md'];
+  for(const file of additions) put(join(f.source,file),'content '+file);
+  success(packageRun(f));
+  for(const file of additions) for(const dest of [f.repo,...[0,1,2].map(f.dest)]) assert.equal(readFileSync(join(dest,file),'utf8'),'content '+file);
+  put(join(f.source,'assets/scenarios/another-type/template/new.txt'),'later type');
+  success(packageRun(f));
+  for(const dest of [f.repo,...[0,1,2].map(f.dest)]) assert.equal(readFileSync(join(dest,'assets/scenarios/another-type/template/new.txt'),'utf8'),'later type');
+  assert.deepEqual(repoBackups(f),[]); noPackageDebris(f);
+});
+
+for (const baseline of ['released', 'missing', 'unknown']) {
+  test('legacy cleanup preserves modified and added files with ' + baseline + ' baseline', t => {
+    const f = fixture(t);
+    packageSource(f);
+    if (baseline !== 'missing') put(join(f.source, 'references/legacy-template-sha256.tsv'), baseline === 'released' ? "1977dda405ee9e4e0dad1dcd031ab57af1fe298de98ee99f91640b08cfe199be\tassets/template/workflow/flow.json\n228d2e9459173ac0509a3e53b10ecfe621cf61962f24cae0d54f15af707e5771\tassets/template/.gitignore\n732689ce7f0172c293bd178fd7d1057cc3c9b481233bf2b66e896b332e2783ba\tassets/template/memory.md\n7b8b38a85d3b2c610f73162f1abd8bce399ed7b6cb0549c9936817fe9f6164cd\tassets/template/workflow/steps/close-tabs.md\n81c19b4fdb6b7995667733f33739223ff4a7d5c5c8a869f680239d8a453e057e\tassets/template/install.sh\n8af253339907afc6630516a63cfe4e2c741183c1f3881e3afae4b9fe41ad7733\tassets/template/workflow/steps/work.md\n8e8134c51e92bfb941d11d2feb5cb2183dfa6526994018e19e844e44324a0507\tassets/template/run.sh\n9feaaf1601e181c1627640c68506a0178ada5f81b3ec2ce62fa5d5ac2cb68577\tassets/template/install.ps1\nb404ea3345660e5846547ce282efae59b8a7082baf4a9a821f481903c645216f\tassets/template/uninstall.sh\nd02afdbee617e40e5a29752c1269575f0b58a4be5b343e9ac5254da426cf16bb\tassets/template/uninstall.ps1\nd9509e20121bcce84bff2af32f05e1ca726da71d5023d0282ffe26a814d98d71\tassets/template/workflow/steps/review.md\ndc23083081e5031f492e626bd2810408656c665ef6a3d2e84651953d565b48f8\tassets/template/tests/scenario.test.mjs\nf37283f64303a6c676a41dd66fd666e31c6c8d28ccda5e5fff93998ea62cada8\tassets/template/workflow/steps/learn.md\nfa5b38c3484f93d38ee6a7072a6bcd8c086b7d0e124f3c1f3375e6b61743c7b1\tassets/template/workflow/context.md\nfb61c02b4c019cbbe7cd5f12743b7fef1c90063e77af6fc64105e24b3b2e3a24\tassets/template/workflow/steps/notify.md\nff415f1dde48bc6259a3043c9d45b977e34d7ec53fcf06b42b1feb1fbaca5d4f\tassets/template/run.ps1\n" : '0'.repeat(64) + '\tassets/template/.gitignore\n');
+    const run = () => packageRun(f);
+    success(run());
+    for (const dest of [f.repo, f.dest(0)]) {
+      put(join(dest, 'assets/template/.gitignore'), 'runtime/\n.DS_Store\n');
+      put(join(dest, 'assets/template/memory.md'), 'user modified');
+      put(join(dest, 'assets/template/custom.txt'), 'user added');
+    }
+    success(run());
+    for (const dest of [f.repo, f.dest(0)]) {
+      assert.equal(existsSync(join(dest, 'assets/template/.gitignore')), baseline !== 'released');
+      assert.equal(readFileSync(join(dest, 'assets/template/memory.md'), 'utf8'), 'user modified');
+      assert.equal(readFileSync(join(dest, 'assets/template/custom.txt'), 'utf8'), 'user added');
+    }
+  });
+}
+
+for (const link of ['leaf', 'ancestor']) {
+  test('legacy cleanup never follows ' + link + ' symlinks', t => {
+    const f = fixture(t); packageSource(f);
+    put(join(f.source, 'references/legacy-template-sha256.tsv'), "1977dda405ee9e4e0dad1dcd031ab57af1fe298de98ee99f91640b08cfe199be\tassets/template/workflow/flow.json\n228d2e9459173ac0509a3e53b10ecfe621cf61962f24cae0d54f15af707e5771\tassets/template/.gitignore\n732689ce7f0172c293bd178fd7d1057cc3c9b481233bf2b66e896b332e2783ba\tassets/template/memory.md\n7b8b38a85d3b2c610f73162f1abd8bce399ed7b6cb0549c9936817fe9f6164cd\tassets/template/workflow/steps/close-tabs.md\n81c19b4fdb6b7995667733f33739223ff4a7d5c5c8a869f680239d8a453e057e\tassets/template/install.sh\n8af253339907afc6630516a63cfe4e2c741183c1f3881e3afae4b9fe41ad7733\tassets/template/workflow/steps/work.md\n8e8134c51e92bfb941d11d2feb5cb2183dfa6526994018e19e844e44324a0507\tassets/template/run.sh\n9feaaf1601e181c1627640c68506a0178ada5f81b3ec2ce62fa5d5ac2cb68577\tassets/template/install.ps1\nb404ea3345660e5846547ce282efae59b8a7082baf4a9a821f481903c645216f\tassets/template/uninstall.sh\nd02afdbee617e40e5a29752c1269575f0b58a4be5b343e9ac5254da426cf16bb\tassets/template/uninstall.ps1\nd9509e20121bcce84bff2af32f05e1ca726da71d5023d0282ffe26a814d98d71\tassets/template/workflow/steps/review.md\ndc23083081e5031f492e626bd2810408656c665ef6a3d2e84651953d565b48f8\tassets/template/tests/scenario.test.mjs\nf37283f64303a6c676a41dd66fd666e31c6c8d28ccda5e5fff93998ea62cada8\tassets/template/workflow/steps/learn.md\nfa5b38c3484f93d38ee6a7072a6bcd8c086b7d0e124f3c1f3375e6b61743c7b1\tassets/template/workflow/context.md\nfb61c02b4c019cbbe7cd5f12743b7fef1c90063e77af6fc64105e24b3b2e3a24\tassets/template/workflow/steps/notify.md\nff415f1dde48bc6259a3043c9d45b977e34d7ec53fcf06b42b1feb1fbaca5d4f\tassets/template/run.ps1\n");
+    success(packageRun(f));
+    const outside = join(f.root, 'outside');
+    put(join(outside, '.gitignore'), 'runtime/\n.DS_Store\n');
+    for (const dest of [f.repo, f.dest(0)]) {
+      if (link === 'ancestor') symlinkSync(outside, join(dest, 'assets/template'));
+      else { mkdirSync(join(dest, 'assets/template'), {recursive:true}); symlinkSync(join(outside, '.gitignore'), join(dest, 'assets/template/.gitignore')); }
+    }
+    success(packageRun(f));
+    assert.equal(readFileSync(join(outside, '.gitignore'), 'utf8'), 'runtime/\n.DS_Store\n');
+    for (const dest of [f.repo, f.dest(0)]) assert.ok(lstatSync(join(dest, 'assets/template', ...(link === 'leaf' ? ['.gitignore'] : []))).isSymbolicLink());
+  });
+}
+
+test('Git replacement keeps legacy user files in shared and profile active destinations', t => {
+  const f = fixture(t);
+  success(f.run());
+  for (const dest of [f.repo, f.dest(0)]) {
+    put(join(dest, 'assets/template/memory.md'), 'modified legacy memory');
+    put(join(dest, 'assets/template/added.txt'), 'added legacy content');
+  }
+  success(f.run({ FAKE_DIRTY: ' M engine.mjs\n' }));
+  for (const dest of [f.repo, f.dest(0)]) {
+    assert.equal(readFileSync(join(dest, 'assets/template/memory.md'), 'utf8'), 'modified legacy memory');
+    assert.equal(readFileSync(join(dest, 'assets/template/added.txt'), 'utf8'), 'added legacy content');
+  }
 });

@@ -6,9 +6,9 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
-const template = fileURLToPath(new URL('../assets/template/run.ps1', import.meta.url));
+const template = fileURLToPath(new URL('../assets/scenarios/browser-monitor/template/run.ps1', import.meta.url));
 const engine = fileURLToPath(new URL('../engine.mjs', import.meta.url));
-const cleaner = '/Users/seesoong/.aside/u/0/skills/user/quarantine-free-files/scripts/clear-quarantine.sh';
+const cleaner = process.env.ASIDE_CLEAR_QUARANTINE;
 const pwsh = [process.env.POWERSHELL_EXE, 'pwsh', 'powershell.exe'].filter(Boolean).find(exe => spawnSync(exe, ['-NoProfile', '-NonInteractive', '-Command', 'exit 0']).status === 0);
 const options = { skip: !pwsh && 'PowerShell is not available; set POWERSHELL_EXE' };
 const nativeOptions = { skip: !pwsh ? 'PowerShell is not available; set POWERSHELL_EXE' : process.platform === 'win32' ? 'POSIX native executable fixture; Windows native execution is not verified by this fixture' : false };
@@ -75,7 +75,7 @@ test('Windows runner passes the matching account, own folder, custom shared repo
   assert.equal(existsSync(join(f.root, 'injected')), false);
   assert.equal(existsSync(join(f.scenario, 'cli_injected')), false);
   assert.equal(existsSync(join(f.root, 'cli_injected')), false);
-  const runs = join(f.scenario, 'runtime/runs');
+  const runs = join(f.scenario, 'runs');
   const result = JSON.parse(readFileSync(join(runs, readdirSync(runs)[0], 'run.json'), 'utf8'));
   assert.equal(result.finishStatus, 'success');
   assert.equal(result.sessionId, 'fixture123');
@@ -92,7 +92,7 @@ for (const [name, extra] of [
     assert.notEqual(result.status, 0, result.stdout + result.stderr);
     assert.equal(existsSync(f.nodeLog), false);
     assert.deepEqual(f.calls(), [['account', 'list']]);
-    assert.equal(existsSync(join(f.scenario, 'runtime')), false);
+    assert.equal(existsSync(join(f.scenario, 'runs')), false);
   });
 }
 

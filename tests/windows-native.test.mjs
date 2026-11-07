@@ -8,7 +8,7 @@ import { spawnSync } from 'node:child_process';
 
 const options = { skip: process.platform !== 'win32' && 'Windows PE integration requires Windows; not verified on this platform' };
 const powershell = process.env.POWERSHELL_EXE || 'powershell.exe';
-const template = fileURLToPath(new URL('../assets/template/run.ps1', import.meta.url));
+const template = fileURLToPath(new URL('../assets/scenarios/browser-monitor/template/run.ps1', import.meta.url));
 const engine = fileURLToPath(new URL('../engine.mjs', import.meta.url));
 const flags = ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'RemoteSigned'];
 const source = String.raw`
@@ -99,7 +99,7 @@ test('Windows native PE CLI preserves account, Korean UTF-8 output and multiline
     const expected = join(f.scenario, 'workflow', file);
     assert.ok(calls[1][5].includes(expected), JSON.stringify({ expected, actualPrompt: calls[1][5] }));
   }
-  const runs = join(f.scenario, 'runtime/runs');
+  const runs = join(f.scenario, 'runs');
   const folders = readdirSync(runs);
   assert.equal(folders.length, 1);
   const record = JSON.parse(readFileSync(join(runs, folders[0], 'run.json'), 'utf8'));
@@ -118,7 +118,7 @@ test('Windows native runner rejects a wrong account without executing the engine
   assert.notEqual(result.status, 0);
   assert.equal(result.error, undefined);
   assert.deepEqual(f.calls(), [['account', 'list']]);
-  assert.equal(existsSync(join(f.scenario, 'runtime')), false);
+  assert.equal(existsSync(join(f.scenario, 'runs')), false);
 });
 
 test('Windows native runner rejects unexpected arguments before any CLI execution', options, t => {
@@ -128,6 +128,6 @@ test('Windows native runner rejects unexpected arguments before any CLI executio
     assert.notEqual(result.status, 0);
     assert.equal(result.error, undefined);
     assert.deepEqual(f.calls(), []);
-    assert.equal(existsSync(join(f.scenario, 'runtime')), false);
+    assert.equal(existsSync(join(f.scenario, 'runs')), false);
   }
 });

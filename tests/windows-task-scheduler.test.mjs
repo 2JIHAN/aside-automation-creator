@@ -7,7 +7,7 @@ import { randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-const template = fileURLToPath(new URL('../assets/template/', import.meta.url));
+const template = fileURLToPath(new URL('../assets/scenarios/browser-monitor/template/', import.meta.url));
 
 test('native Windows Task Scheduler registers and removes only the current user fixture task', { skip: process.platform !== 'win32' && 'Requires the real Windows Task Scheduler service' }, () => {
   const root = realpathSync.native(mkdtempSync(join(tmpdir(), 'aside-native-scheduler-')));
@@ -17,9 +17,9 @@ test('native Windows Task Scheduler registers and removes only the current user 
   const repo = join(root, 'shared repo');
   const home = join(root, 'home');
   try {
-    for (const dir of [scenario, repo, home]) mkdirSync(dir, { recursive: true });
+    for (const dir of [join(scenario, 'maintenance'), repo, home]) mkdirSync(dir, { recursive: true });
     for (const file of ['install.ps1', 'uninstall.ps1']) {
-      writeFileSync(join(scenario, file), readFileSync(join(template, file), 'utf8').replaceAll('__AUTOMATION_SLUG__', slug).replaceAll('__AUTOMATION_NAME__', name));
+      writeFileSync(join(scenario, 'maintenance', file), readFileSync(join(template, 'maintenance', file), 'utf8').replaceAll('__AUTOMATION_SLUG__', slug).replaceAll('__AUTOMATION_NAME__', name));
     }
     writeFileSync(join(scenario, 'run.ps1'), '\ufeffexit 0\r\n');
     writeFileSync(join(repo, 'engine.mjs'), '// Native scheduler test. Never executed.\n');
@@ -39,7 +39,7 @@ function User-Sid([string]$UserId) {
 }
 try {
     $Before = Get-Date
-    & (Join-Path $env:TEST_SCENARIO 'install.ps1') -Minute $Minute
+    & (Join-Path $env:TEST_SCENARIO 'maintenance/install.ps1') -Minute $Minute
     $Task = Get-ScheduledTask -TaskPath '\' -TaskName $TaskName -ErrorAction Stop
     $Identity = [Security.Principal.WindowsIdentity]::GetCurrent()
     Assert ((User-Sid $Task.Principal.UserId) -eq $Identity.User.Value) 'Task principal is not the current Windows identity.'
@@ -55,7 +55,7 @@ try {
     $Start = [datetime]::Parse(@($Task.Triggers)[0].StartBoundary)
     Assert ($Start -gt $Before -and $Start -le (Get-Date).AddHours(1)) 'First trigger must be in the next hour, not immediate.'
     Assert (@($Task.Triggers)[0].Repetition.Interval -eq 'PT1H') 'Expected hourly repetition.'
-    & (Join-Path $env:TEST_SCENARIO 'uninstall.ps1')
+    & (Join-Path $env:TEST_SCENARIO 'maintenance/uninstall.ps1')
     Assert (-not (Get-ScheduledTask -TaskPath '\' -TaskName $TaskName -ErrorAction SilentlyContinue)) 'Task survived uninstall.'
     Assert (-not (Test-Path -LiteralPath $Launcher)) 'Launcher survived uninstall.'
     foreach ($File in @((Join-Path $env:TEST_SCENARIO 'run.ps1'), (Join-Path $env:ASIDE_AUTOMATION_CREATOR_REPO 'engine.mjs'), $env:ASIDE_CLI_PATH)) {

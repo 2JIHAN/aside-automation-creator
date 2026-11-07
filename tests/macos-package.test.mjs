@@ -5,8 +5,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
-const cleaner='/Users/seesoong/.aside/u/0/skills/user/quarantine-free-files/scripts/clear-quarantine.sh';
-const template=readFileSync(new URL('../assets/template/run.sh',import.meta.url),'utf8');
+const cleaner=process.env.ASIDE_CLEAR_QUARANTINE;
+const template=readFileSync(new URL('../assets/scenarios/browser-monitor/template/run.sh',import.meta.url),'utf8');
 function fixture(t) {
   const root=mkdtempSync(join(tmpdir(),'aside-package-run-'));
   t.after(()=>rmSync(root,{recursive:true,force:true}));
@@ -30,7 +30,7 @@ test('run rejects every argument before account lookup or engine execution',t=>{
   const f=fixture(t), result=f.run(['--test']); assert.equal(result.status,2); assert.equal(existsSync(f.log),false);
 });
 test('templates share bundled Node fallback and preserve private paths for launchd',()=>{
-  const install=readFileSync(new URL('../assets/template/install.sh',import.meta.url),'utf8');
+  const install=readFileSync(new URL('../assets/scenarios/browser-monitor/template/maintenance/install.sh',import.meta.url),'utf8');
   for(const text of [template,install]) {
     assert.match(text,/NODE=\$\{ASIDE_NODE_PATH:-\$\(command -v node \|\| true\)\}/);
     assert.match(text,/NODE=\$\{NODE:-"\$ENGINE_REPO\/runtime\/node"\}/);
