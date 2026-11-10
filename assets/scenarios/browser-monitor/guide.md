@@ -11,7 +11,7 @@
 `template/`의 기본 흐름은 업무 수행, 결과 알림, 작업 탭 정리입니다. 문제가 생기면 검토 후 원래 단계로 돌아가며, 예외 처리 뒤에는 학습 단계를 거칠 수 있습니다.
 
 - 업무 대상과 권한은 `workflow/context.md`에 적습니다.
-- 업무 절차와 성공 조건은 `workflow/steps/work.md`에 작성합니다. 권한이나 완료 조건이 다르면 [스텝 경계 체크리스트](template/workflow/step-boundary-checklist.md)를 보고 나눕니다.
+- 업무 절차와 성공 조건은 `workflow/steps/work.md`에 작성합니다. 권한이나 완료 조건이 다르면 [학습 지침](template/workflow/steps/learn.md)의 「구조 판단」 질문을 보고 나눕니다.
 - 알림 수신자와 전송 방법은 `workflow/steps/notify.md`에 작성합니다. 기본 예시는 메시지 본문과 전송 화면의 증거를 확인합니다. API나 파일을 증거로 쓸 업무라면 확인 방법과 완료 조건도 맞춰 바꿉니다.
 - 자동 개선을 허용하지 않으면 `learn`과 관련 상태 및 분기를 제외합니다. 학습 여부는 템플릿이 아니라 사용자와 확인한 범위에 따릅니다.
 - 단계를 바꾸면 `flow.json`의 연결과 상태 선언, `maintenance/tests/`의 업무별 기대 결과도 함께 맞춥니다.

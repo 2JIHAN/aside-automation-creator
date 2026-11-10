@@ -15,7 +15,7 @@ description: "사용자가 실제 작업을 함께 따라가며 반복 업무를
 
 ## 2. 단계 설계
 
-실제 절차를 익힌 뒤 [스텝 경계 체크리스트](assets/scenarios/basic/template/workflow/step-boundary-checklist.md)로 작업을 나누고, 그 이유를 `README.md`에 짧게 남깁니다. 템플릿의 단계 수나 이름을 그대로 따라야 하는 것은 아닙니다.
+실제 절차를 익힌 뒤 [학습 지침](assets/scenarios/basic/template/workflow/steps/learn.md)의 「구조 판단」 질문으로 작업을 나누고, 그 이유를 `README.md`에 짧게 남깁니다. 템플릿의 단계 수나 이름을 그대로 따라야 하는 것은 아닙니다.
 
 ## 3. 파일 작성
 

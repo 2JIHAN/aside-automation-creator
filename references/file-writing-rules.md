@@ -14,7 +14,6 @@ OS에 맞는 실행기와 설치 및 해제 스크립트를 한 세트로 선택
 │   ├── context.md
 │   ├── flow.json
 │   ├── memory.md
-│   ├── step-boundary-checklist.md
 │   └── steps/
 │       ├── work.md
 │       ├── review.md

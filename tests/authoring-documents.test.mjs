@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
-const files = ['SKILL.md', 'references/file-writing-rules.md', 'assets/scenarios/index.md', ...fs.readdirSync(path.join(root, 'assets/scenarios'), {withFileTypes:true}).filter(entry => entry.isDirectory()).map(entry => 'assets/scenarios/' + entry.name + '/guide.md'), 'assets/scenarios/basic/template/workflow/step-boundary-checklist.md'];
+const files = ['SKILL.md', 'references/file-writing-rules.md', 'assets/scenarios/index.md', ...fs.readdirSync(path.join(root, 'assets/scenarios'), {withFileTypes:true}).filter(entry => entry.isDirectory()).map(entry => 'assets/scenarios/' + entry.name + '/guide.md')];
 const documents = new Map(files.map(f => [f, fs.readFileSync(path.join(root, f), 'utf8')]));
 
 function links(file) {
@@ -16,7 +16,7 @@ function links(file) {
 
 test('제작 문서의 참고 링크가 실제 파일을 가리킴', () => {
   for (const file of files) for (const link of links(file)) assert.ok(fs.statSync(path.join(root, link)).isFile(), link);
-  assert.ok(links('SKILL.md').includes('assets/scenarios/basic/template/workflow/step-boundary-checklist.md'));
+  assert.ok(links('SKILL.md').includes('assets/scenarios/basic/template/workflow/steps/learn.md'));
   assert.ok(links('SKILL.md').includes('references/file-writing-rules.md'));
 });
 
@@ -33,7 +33,7 @@ for (const type of ['basic', 'browser-monitor']) test(type + ': 학습 지침은
   const learn = fs.readFileSync(path.join(root, file), 'utf8');
   assert.ok(!/references\/|ASIDE_AUTOMATION_CREATOR_REPO|~\/\.local/.test(learn));
   const local = [...learn.matchAll(/\]\(([^)]+)\)/g)].map(m => path.resolve(root, path.dirname(file), m[1]));
-  assert.ok(local.length > 0);
+  assert.match(learn, /## 구조 판단[\s\S]*한 가지 목적을 수행하나요/);
   const workflow = path.resolve(root, 'assets/scenarios/' + type + '/template/workflow') + path.sep;
   for (const link of local) {
     assert.ok(link.startsWith(workflow));
@@ -49,7 +49,7 @@ test('basic fallback provides a usable template without browser-monitor assumpti
     assert.ok(fs.statSync(path.join(basic, file)).isFile(), file);
   }
   assert.ok(fs.statSync(path.join(basic, 'workflow/context.md')).isFile());
-  assert.ok(fs.statSync(path.join(basic, 'workflow/step-boundary-checklist.md')).isFile());
+  assert.equal(fs.existsSync(path.join(basic, 'workflow/step-boundary-checklist.md')), false);
   assert.ok(links('SKILL.md').includes('assets/scenarios/index.md'));
   assert.ok(links('assets/scenarios/index.md').includes('assets/scenarios/basic/guide.md'));
   assert.ok(links('assets/scenarios/index.md').includes('assets/scenarios/browser-monitor/guide.md'));
