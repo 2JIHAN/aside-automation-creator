@@ -7,20 +7,24 @@ import { stripVTControlCharacters } from "node:util";
 const MAX_RECHECKS_PER_STEP = 2;
 
 function main() {
-  if (process.argv.length !== 4) {
-    throw Error("사용법: node engine.mjs <account> <scenario-folder>");
+  if (process.argv.length !== 4 && process.argv.length !== 5) {
+    throw Error("사용법: node engine.mjs <account> <scenario-folder> [flow-file]");
   }
   const root = path.resolve(process.argv[3]);
   const cli = process.env.ASIDE_CLI_PATH || (process.platform === "win32" ? "aside.exe" : path.join(os.homedir(), ".local/bin/aside"));
   const account = process.argv[2];
-  const flow = JSON.parse(
-    fs.readFileSync(path.join(root, "workflow/flow.json"), "utf8"),
-  );
+  // 흐름 파일을 생략하면 기존처럼 workflow/flow.json을 쓴다. 지정한 파일은 시나리오 폴더 안에 있어야 한다.
+  const flowFile = path.resolve(root, process.argv[4] ?? "workflow/flow.json");
+  if (!flowFile.startsWith(root + path.sep)) {
+    throw Error("흐름 파일은 시나리오 폴더 안에 있어야 합니다.");
+  }
+  const flow = JSON.parse(fs.readFileSync(flowFile, "utf8"));
   const contextFile = path.join(root, flow.contextFile);
 
   const run = {
     startedAt: new Date().toISOString(),
     sessionId: null,
+    flowFile: path.relative(root, flowFile),
     state: { ...flow.initialState },
     turns: [],
   };

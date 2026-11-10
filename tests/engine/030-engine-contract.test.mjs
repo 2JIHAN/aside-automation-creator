@@ -105,3 +105,27 @@ for (const invalid of [{ step: 'task-c', finishWithStatus: 'ok' }, {}, { finishW
 test('공통 엔진은 이전 암묵 상태와 응답 조건 문법을 사용하지 않음', () => {
   for (const legacy of ['previousValue', 'rule.response', 'when.value', 'when.decision']) assert.ok(!engineSource.includes(legacy));
 });
+test('흐름 파일 인자를 주면 그 파일로 실행하고 run.json에 기록', () => {
+  const f = fixture(success());
+  const flowPath = path.join(f.routine, 'workflow/flow.json');
+  fs.renameSync(flowPath, path.join(f.routine, 'workflow/flow.alt.json'));
+  const out = spawnSync(process.execPath, [f.engine, 'u1', f.routine, 'workflow/flow.alt.json'], { env: f.env, encoding: 'utf8' });
+  assert.equal(out.status, 0, out.stderr);
+  const [run] = lines(out.stdout, 'ENGINE_RESULT=');
+  assert.equal(run.flowFile, path.join('workflow', 'flow.alt.json'));
+});
+test('흐름 파일 인자를 생략하면 workflow/flow.json을 기록', () => {
+  const { out, run } = engineCase(success());
+  assert.equal(out.status, 0, out.stderr);
+  assert.equal(run.flowFile, path.join('workflow', 'flow.json'));
+});
+test('시나리오 폴더 밖 흐름 파일은 CLI 호출 없이 거부', () => {
+  const f = fixture(success());
+  fs.copyFileSync(path.join(f.routine, 'workflow/flow.json'), path.join(f.dir, 'outside.json'));
+  for (const arg of ['../outside.json', path.join(f.dir, 'outside.json')]) {
+    const out = spawnSync(process.execPath, [f.engine, 'u1', f.routine, arg], { env: f.env, encoding: 'utf8' });
+    assert.notEqual(out.status, 0);
+    assert.match(out.stderr, /시나리오 폴더 안/);
+    assert.deepEqual(readCalls(f.calls), []);
+  }
+});
