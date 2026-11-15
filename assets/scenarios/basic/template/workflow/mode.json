@@ -1,0 +1,7 @@
+{
+  "mode": "operational",
+  "flows": {
+    "dev": "workflow/flows/dev.json",
+    "operational": "workflow/flows/operational.json"
+  }
+}

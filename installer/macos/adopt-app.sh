@@ -41,10 +41,10 @@ trap 'rm -rf "$WORK"' EXIT
 /usr/bin/ditto "$SOURCE" "$WORK/Aside Automation Creator.app"
 while IFS= read -r -d '' item; do
   if [ -L "$item" ]; then
-    if /usr/bin/xattr -s "$item" | grep -qx com.apple.quarantine; then /usr/bin/xattr -s -d com.apple.quarantine "$item"; fi
+    if /usr/bin/xattr -s "$item" | grep -qx com.apple.quarantine; then /usr/bin/xattr -s -d com.apple.quarantine "$item" 2>/dev/null || true; fi
     ! /usr/bin/xattr -s "$item" | grep -qx com.apple.quarantine || fail '앱 링크의 격리 속성을 제거하지 못했습니다.'
   else
-    if /usr/bin/xattr "$item" | grep -qx com.apple.quarantine; then /usr/bin/xattr -d com.apple.quarantine "$item"; fi
+    if /usr/bin/xattr "$item" | grep -qx com.apple.quarantine; then /usr/bin/xattr -d com.apple.quarantine "$item" 2>/dev/null || true; fi
     ! /usr/bin/xattr "$item" | grep -qx com.apple.quarantine || fail '앱의 격리 속성을 제거하지 못했습니다.'
   fi
 done < <(find "$WORK" -print0)

@@ -36,7 +36,7 @@ for (const bad of [{ exit: 9 }, { raw: '설명만' }, { raw: '상태: 없는값'
 for (const cause of ['후보시험', '해결불가']) {
   test('선택된 학습계기 경로: ' + cause, () => {
     const f = fixture(['정리완료', '학습완료']);
-    const file = path.join(f.routine, 'workflow/flow.json');
+    const file = path.join(f.routine, 'workflow/flows/operational.json');
     const flow = JSON.parse(fs.readFileSync(file, 'utf8'));
     flow.startStep = 'cleanup';
     Object.assign(flow.initialState, { 업무상태: '완료', 알림상태: '알림완료', 학습계기: cause });
@@ -45,7 +45,7 @@ for (const cause of ['후보시험', '해결불가']) {
     assert.equal(out.status, 0, out.stderr); assert.equal(run.finishStatus, 'ok');
     assert.deepEqual(run.turns.map(t => t.step), ['cleanup', 'learn']);
     assert.equal(run.state.학습계기, cause); assert.equal(run.state.학습상태, '학습완료');
-    assert.equal(fs.readFileSync(path.join(f.routine, 'workflow/memory.md'), 'utf8'), fs.readFileSync(path.join(root, 'workflow/memory.md'), 'utf8'));
+    assert.equal(fs.existsSync(path.join(f.routine, 'workflow/learnings.md')), false);
   });
 }
 
@@ -59,7 +59,7 @@ test('학습 기술 오류에도 성공한 업무 상태와 결과 증거를 유
 });
 test('학습은 사용자 승인 범위를 확인한 뒤 수행한다는 정적 계약', () => {
   const text = fs.readFileSync(path.join(root, 'workflow/steps/learn.md'), 'utf8');
-  assert.match(text, /학습이 금지됐거나 범위가 미확정이면 지침과 메모리를 바꾸지 않습니다/);
+  assert.match(text, /금지됐거나 범위가 미확정이면 지침과 학습 내용을 바꾸지 않고/);
   assert.match(text, /현재 실행 증거에 미수행 이유/);
   assert.match(text, /정식 원문을 보관/);
   assert.match(text, /되돌립니다/);

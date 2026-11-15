@@ -48,12 +48,12 @@ test('직접 종료도 진행 중인 검토 복귀 정보를 정리함', () => {
 });
 
 
-test('재확인 한도의 유효값 해결불가는 현재턴결과에 저장하고 원문은 유지', () => {
+test('재확인 한도의 유효값과 보고한 상태만 남기고 CLI 원문은 저장하지 않음', () => {
   const { out, run } = engineCase(['예외발생', '재확인', '예외발생', '재확인', '예외발생', '재확인', { exit: 9 }]);
   assert.equal(out.status, 1);
   assert.deepEqual(run.state, { ...initialState, 첫작업상태: '예외발생', 학습계기: '해결불가', 현재턴결과: '해결불가' });
   const limited = run.turns.at(-2);
   assert.equal(limited.response.value, '해결불가');
-  assert.equal(limited.response.text, '상태: 재확인');
+  assert.deepEqual(limited.response, { value: '해결불가' });
   assert.equal(limited.recheckLimit.reportedValue, '재확인');
 });

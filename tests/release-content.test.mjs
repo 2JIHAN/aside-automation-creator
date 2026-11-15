@@ -12,6 +12,7 @@ test('CI discovers both template test suites and validates authoring documents',
   assert.ok(workflow.includes('assets/scenarios/*/template/maintenance/tests/*.test.mjs'));
   assert.ok(workflow.includes('tests/authoring-documents.test.mjs'));
   assert.ok(workflow.includes('tests/release-content.test.mjs'));
+  assert.equal(workflow.split('tests/scenario-launchers.test.mjs').length - 1, 2);
   assert.ok(!workflow.includes('assets/template/'));
   for (const filter of ['SKILL.md', 'references/**', 'assets/scenarios/**']) assert.equal(workflow.split("- '" + filter + "'").length - 1, 2, filter);
   for (const type of ['basic', 'browser-monitor']) assert.ok(fs.readdirSync(path.join(root, 'assets/scenarios', type, 'template/maintenance/tests')).some(name => name.endsWith('.test.mjs')));

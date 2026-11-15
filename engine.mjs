@@ -10,13 +10,17 @@ function main() {
   if (process.argv.length !== 4 && process.argv.length !== 5) {
     throw Error("사용법: node engine.mjs <account> <scenario-folder> [flow-file]");
   }
-  const root = path.resolve(process.argv[3]);
+  const root = fs.realpathSync(process.argv[3]);
   const cli = process.env.ASIDE_CLI_PATH || (process.platform === "win32" ? "aside.exe" : path.join(os.homedir(), ".local/bin/aside"));
   const account = process.argv[2];
   // 흐름 파일을 생략하면 기존처럼 workflow/flow.json을 쓴다. 지정한 파일은 시나리오 폴더 안에 있어야 한다.
-  const flowFile = path.resolve(root, process.argv[4] ?? "workflow/flow.json");
-  if (!flowFile.startsWith(root + path.sep)) {
+  const requestedFlow = path.resolve(root, process.argv[4] ?? "workflow/flow.json");
+  if (!requestedFlow.startsWith(root + path.sep)) {
     throw Error("흐름 파일은 시나리오 폴더 안에 있어야 합니다.");
+  }
+  const flowFile = fs.realpathSync(requestedFlow);
+  if (!flowFile.startsWith(root + path.sep) || !fs.lstatSync(requestedFlow).isFile()) {
+    throw Error("흐름 파일은 시나리오 폴더 안의 일반 파일이어야 합니다.");
   }
   const flow = JSON.parse(fs.readFileSync(flowFile, "utf8"));
   const contextFile = path.join(root, flow.contextFile);
@@ -52,17 +56,19 @@ function main() {
       const evidenceFolder = path.join(run.runDir, turn.evidenceDir);
       fs.mkdirSync(evidenceFolder, { recursive: true });
 
-      let prompt = `\n이번 턴 작업 증거 폴더 경로: \`${evidenceFolder}\`\n`;
+      let prompt = "";
+      if (!run.sessionId) prompt += `실행 결과 폴더: \`${run.runDir}\`\n`;
+      prompt += `이번 턴 증거 폴더: \`${evidenceFolder}\`\n`;
       if (run.returnStep) prompt += `검토 복귀 대상: ${run.returnStep}\n`;
       const limitedTurn = run.turns.find(previous => previous.recheckLimit);
       if (limitedTurn) prompt += `재확인 제한 기록: ${JSON.stringify(limitedTurn.recheckLimit)}\n`;
 
       if (!run.sessionId) {
-        prompt += `\n먼저 아래 공통 지침 파일을 읽고 따르세요.\n경로: \`${contextFile}\`\n`;
+        prompt += `\n필수 배경지식: \`${contextFile}\`\n`;
       }
 
       const instructionFile = path.join(root, step.instructionFile);
-      prompt += `\n아래 단계 지침 파일을 읽고 해당 작업만 수행하세요.\n경로: \`${instructionFile}\`\n`;
+      prompt += `이번 턴에서는 다음 단계만 수행하세요: \`${instructionFile}\`\n`;
 
       let command;
       if (!run.sessionId) {
@@ -72,11 +78,11 @@ function main() {
       }
       const reply = spawnSync(cli, command, { encoding: "utf8" });
       if (reply.error) {
-        throw reply.error;
+        throw Error(`Aside 실행을 시작하지 못했습니다 (${reply.error.code ?? "unknown"}).`);
       }
       if (reply.status !== 0) {
         throw Error(
-          `Aside 실행 실패 (종료 코드 ${reply.status}): ${reply.stderr}`,
+          `Aside 실행 실패 (종료 코드 ${reply.status}).`,
         );
       }
 
@@ -85,6 +91,7 @@ function main() {
         const sessionNotice = terminalOutput.match(
           /created new session:\s+(\w+)/,
         );
+        if (!sessionNotice) throw Error("Aside 세션 ID를 확인하지 못했습니다.");
         run.sessionId = sessionNotice[1];
       }
       const text = stripVTControlCharacters(reply.stdout).trim();
@@ -113,7 +120,7 @@ function main() {
         Object.entries(rule.when ?? {}).every(([key, expected]) => nextState[key] === expected),
       );
       if (matches.length !== 1) {
-        throw Error(`다음 단계 조건이 ${matches.length}개 일치합니다: ${value}`);
+        throw Error(`다음 단계 조건이 ${matches.length}개 일치합니다.`);
       }
       const { step: destination, finishWithStatus } = matches[0];
       if (Boolean(destination) === Boolean(finishWithStatus)) {
@@ -134,7 +141,7 @@ function main() {
       }
 
       run.state = nextState;
-      turn.response = { value, text };
+      turn.response = { value };
       if (step.rememberCaller) delete run.returnStep;
       if (finishWithStatus) {
         run.finishStatus = turn.finishStatus = finishWithStatus;

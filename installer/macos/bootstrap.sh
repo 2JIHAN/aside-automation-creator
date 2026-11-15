@@ -37,7 +37,7 @@ clear_tree() {
   while IFS= read -r -d '' item; do
     [ ! -L "$item" ] || fail '패키지에 심볼릭 링크가 있습니다.'
     attrs=$(/usr/bin/xattr "$item")
-    if printf '%s\n' "$attrs" | grep -qx com.apple.quarantine; then /usr/bin/xattr -d com.apple.quarantine "$item"; fi
+    if printf '%s\n' "$attrs" | grep -qx com.apple.quarantine; then /usr/bin/xattr -d com.apple.quarantine "$item" 2>/dev/null || true; fi
     ! /usr/bin/xattr "$item" | grep -qx com.apple.quarantine || fail '격리 속성을 제거하지 못했습니다.'
   done < <(find "$1" -print0)
 }
@@ -61,7 +61,7 @@ if [ ! -x "$HOME/.local/bin/aside" ]; then
   clear_tree "$ASIDE_HOME/cli/Aside CLI.app"
   /usr/bin/codesign --verify --strict --deep -R='anchor apple generic and certificate leaf[subject.OU] = "8CPD4K4TBB"' "$ASIDE_HOME/cli/Aside CLI.app"
   ln -s "$ASIDE_HOME/cli/Aside CLI.app/Contents/MacOS/aside" "$HOME/.local/bin/aside"
-  if /usr/bin/xattr -s "$HOME/.local/bin/aside" | grep -qx com.apple.quarantine; then /usr/bin/xattr -s -d com.apple.quarantine "$HOME/.local/bin/aside"; fi
+  if /usr/bin/xattr -s "$HOME/.local/bin/aside" | grep -qx com.apple.quarantine; then /usr/bin/xattr -s -d com.apple.quarantine "$HOME/.local/bin/aside" 2>/dev/null || true; fi
   ! /usr/bin/xattr -s "$HOME/.local/bin/aside" | grep -qx com.apple.quarantine || fail 'CLI 링크 격리 속성 제거에 실패했습니다.'
 fi
 printf '스킬과 공용 엔진을 설치하고 있습니다.\n'

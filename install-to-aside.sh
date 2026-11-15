@@ -13,18 +13,17 @@ fail() { printf '설치 중단: %s\n' "$*" >&2; exit 1; }
 
 clear_one() {
   [ "$(uname -s)" = Darwin ] || return 0
-  local file="$1" attrs mode='' code=0
+  local file="$1" attrs mode=''
   if [ -L "$file" ]; then
     attrs=$(/usr/bin/xattr -s "$file")
-    if printf '%s\n' "$attrs" | grep -qx com.apple.quarantine; then /usr/bin/xattr -s -d com.apple.quarantine "$file"; fi
+    if printf '%s\n' "$attrs" | grep -qx com.apple.quarantine; then /usr/bin/xattr -s -d com.apple.quarantine "$file" 2>/dev/null || true; fi
     attrs=$(/usr/bin/xattr -s "$file")
   else
     attrs=$(/usr/bin/xattr "$file")
     if printf '%s\n' "$attrs" | grep -qx com.apple.quarantine; then
       if [ ! -w "$file" ]; then mode=$(/usr/bin/stat -f '%Lp' "$file"); chmod u+w "$file"; fi
-      /usr/bin/xattr -d com.apple.quarantine "$file" || code=$?
+      /usr/bin/xattr -d com.apple.quarantine "$file" 2>/dev/null || true
       if [ -n "$mode" ]; then chmod "$mode" "$file"; fi
-      [ "$code" -eq 0 ] || return "$code"
     fi
     attrs=$(/usr/bin/xattr "$file")
   fi
@@ -180,26 +179,39 @@ package_tree() {
   done < <(find "$source" -type f ! -name .DS_Store -print0)
 }
 
-# Only released bytes are disposable. Unknown files remain in the active tree.
+# Only known, unmodified template bytes are disposable. Unknown files stay active.
 legacy_carry() {
-  local source="$1" dest="$2"
-  [ -e "$source/assets/template" ] || [ -L "$source/assets/template" ] || return 0
-  check_package_parent "$source/assets"
-  check_package_parent "$dest/assets"
-  ensure_dir "$dest/assets"
-  [ ! -e "$dest/assets/template" ] && [ ! -L "$dest/assets/template" ] || fail '새 패키지에 legacy template이 있습니다.'
-  cp -RP "$source/assets/template" "$dest/assets/"
+  local source="$1" dest="$2" type name relative
+  [ ! -L "$source" ] || return 0
+  if [ -e "$source/assets/template" ] || [ -L "$source/assets/template" ]; then
+    check_package_parent "$source/assets"
+    check_package_parent "$dest/assets"
+    ensure_dir "$dest/assets"
+    [ ! -e "$dest/assets/template" ] && [ ! -L "$dest/assets/template" ] || fail '새 패키지에 legacy template이 있습니다.'
+    cp -RP "$source/assets/template" "$dest/assets/"
+  fi
+  for type in basic browser-monitor; do
+    for name in memory.md step-boundary-checklist.md flow.json learnings.md; do
+      relative="assets/scenarios/$type/template/workflow/$name"
+      check_package_parent "$(dirname "$source/$relative")"
+      [ -e "$source/$relative" ] || [ -L "$source/$relative" ] || continue
+      [ ! -e "$dest/$relative" ] && [ ! -L "$dest/$relative" ] || continue
+      ensure_dir "$(dirname "$dest/$relative")"
+      cp -P "$source/$relative" "$dest/$relative"
+    done
+  done
 }
 
 legacy_cleanup() {
   local root="$1" baseline="$2" hash relative file before after directory
   [ -f "$baseline" ] && [ ! -L "$baseline" ] || return 0
   (check_package_parent "$(dirname "$baseline")") >/dev/null 2>&1 || return 0
-  (check_package_parent "$root/assets/template") >/dev/null 2>&1 || return 0
-  [ -d "$root/assets/template" ] || return 0
   while IFS=$'\t' read -r hash relative; do
     [[ "$hash" =~ ^[0-9a-f]{64}$ ]] || continue
-    case "$relative" in assets/template/*) ;; *) continue ;; esac
+    case "$relative" in
+      assets/template/*|assets/scenarios/basic/template/workflow/memory.md|assets/scenarios/basic/template/workflow/step-boundary-checklist.md|assets/scenarios/basic/template/workflow/flow.json|assets/scenarios/basic/template/workflow/learnings.md|assets/scenarios/browser-monitor/template/workflow/memory.md|assets/scenarios/browser-monitor/template/workflow/step-boundary-checklist.md|assets/scenarios/browser-monitor/template/workflow/flow.json|assets/scenarios/browser-monitor/template/workflow/learnings.md) ;;
+      *) continue ;;
+    esac
     case "/$relative/" in */../*|*/./*|*//* ) continue ;; esac
     file="$root/$relative"
     (check_package_parent "$(dirname "$file")") >/dev/null 2>&1 || continue
@@ -211,6 +223,8 @@ legacy_cleanup() {
     (check_package_parent "$(dirname "$file")") >/dev/null 2>&1 || continue
     if ! rm -- "$file"; then printf '경고: legacy 파일을 보존했습니다: %s\n' "$file" >&2; fi
   done < "$baseline"
+  (check_package_parent "$root/assets/template") >/dev/null 2>&1 || return 0
+  [ -d "$root/assets/template" ] || return 0
   while IFS= read -r -d '' directory; do
     (check_package_parent "$directory") >/dev/null 2>&1 || continue
     [ -z "$(find "$directory" -mindepth 1 -maxdepth 1 -print -quit)" ] || continue

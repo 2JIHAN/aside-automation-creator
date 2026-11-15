@@ -1,4 +1,4 @@
-﻿[CmdletBinding()]
+[CmdletBinding()]
 param(
     [string]$AsideHome = $(if ($env:ASIDE_HOME) { $env:ASIDE_HOME } else { Join-Path $HOME '.aside' }),
     [string]$Repository = $(if ($env:ASIDE_AUTOMATION_CREATOR_REPO) { $env:ASIDE_AUTOMATION_CREATOR_REPO } else { Join-Path $HOME '.local/share/aside-automation-creator' }),
@@ -74,25 +74,38 @@ function Copy-LegacyItem([string]$Source, [string]$Target) {
 function Copy-Legacy([string]$Source, [string]$Target) {
     Assert-LegacyParents (Join-Path $Source 'assets')
     $Old = Join-Path $Source 'assets/template'
-    if ($null -eq (Get-Item -LiteralPath $Old -Force -ErrorAction SilentlyContinue)) { return }
-    $New = Join-Path $Target 'assets/template'
-    Assert-LegacyParents (Join-Path $Target 'assets')
-    if ($null -ne (Get-Item -LiteralPath $New -Force -ErrorAction SilentlyContinue)) { throw 'New payload unexpectedly contains legacy template.' }
-    Ensure-Directory (Join-Path $Target 'assets')
-    Copy-LegacyItem $Old $New
+    if ($null -ne (Get-Item -LiteralPath $Old -Force -ErrorAction SilentlyContinue)) {
+        $New = Join-Path $Target 'assets/template'
+        Assert-LegacyParents (Join-Path $Target 'assets')
+        if ($null -ne (Get-Item -LiteralPath $New -Force -ErrorAction SilentlyContinue)) { throw 'New payload unexpectedly contains legacy template.' }
+        Ensure-Directory (Join-Path $Target 'assets')
+        Copy-LegacyItem $Old $New
+    }
+    foreach ($Type in @('basic', 'browser-monitor')) {
+        foreach ($Name in @('memory.md', 'step-boundary-checklist.md', 'flow.json', 'learnings.md')) {
+            $Relative = 'assets/scenarios/' + $Type + '/template/workflow/' + $Name
+            $Old = Join-Path $Source $Relative; $New = Join-Path $Target $Relative
+            Assert-LegacyParents (Split-Path -Parent $Old)
+            if ($null -eq (Get-Item -LiteralPath $Old -Force -ErrorAction SilentlyContinue)) { continue }
+            if ($null -ne (Get-Item -LiteralPath $New -Force -ErrorAction SilentlyContinue)) { continue }
+            Ensure-Directory (Split-Path -Parent $New)
+            Copy-LegacyItem $Old $New
+        }
+    }
 }
+
 function Clear-Legacy([string]$Root, [string]$Baseline) {
     if (-not (Test-Path -LiteralPath $Baseline -PathType Leaf)) { return }
-    try { Assert-LegacyParents $Baseline; Assert-LegacyParents (Join-Path $Root 'assets/template') } catch { return }
+    try { Assert-LegacyParents $Baseline } catch { return }
     foreach ($Line in Get-Content -LiteralPath $Baseline -Encoding UTF8) {
-        if ($Line -notmatch '^([0-9a-f]{64})\t(assets/template/[^\\]+)$') { continue }
+        if ($Line -notmatch '^([0-9a-f]{64})\t(assets/template/[^\\]+|assets/scenarios/(?:basic|browser-monitor)/template/workflow/(?:memory\.md|step-boundary-checklist\.md|flow\.json|learnings\.md))$') { continue }
         $Hash = $Matches[1]; $Relative = $Matches[2]
         if ($Relative.Split('/') -contains '..' -or $Relative.Split('/') -contains '.') { continue }
         $File = Join-Path $Root $Relative
         try {
             Assert-LegacyParents $File
             $Before = Get-Item -LiteralPath $File -Force -ErrorAction Stop
-            if ($Before.PSIsContainer) { continue }
+            if ($Before.PSIsContainer -or ($Before.Attributes -band [IO.FileAttributes]::ReparsePoint)) { continue }
             if ((Get-FileHash -LiteralPath $File -Algorithm SHA256).Hash -ine $Hash) { continue }
             Assert-LegacyParents $File
             $After = Get-Item -LiteralPath $File -Force

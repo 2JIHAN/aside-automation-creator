@@ -129,3 +129,66 @@ test('시나리오 폴더 밖 흐름 파일은 CLI 호출 없이 거부', () => 
     assert.deepEqual(readCalls(f.calls), []);
   }
 });
+
+test('첫 턴에는 결과 폴더와 공통 지침, 이후 턴에는 증거 폴더와 단계만 전달한다', () => {
+  const f = fixture(success());
+  const renamed = path.join(f.dir, '예약 시나리오 "테스트"');
+  fs.renameSync(f.routine, renamed);
+  f.routine = renamed;
+  const out = spawnSync(process.execPath, [f.engine, 'u1', f.routine], { env: f.env, encoding: 'utf8' });
+  assert.equal(out.status, 0, out.stderr);
+  const [run] = lines(out.stdout, 'ENGINE_RESULT=');
+  const calls = readCalls(f.calls);
+  assert.equal(calls.length, run.turns.length);
+  for (const [index, turn] of run.turns.entries()) {
+    const evidence = path.join(run.runDir, turn.evidenceDir);
+    const expected = [
+      ...(index === 0 ? ['실행 결과 폴더: `' + run.runDir + '`'] : []),
+      '이번 턴 증거 폴더: `' + evidence + '`',
+      ...(index === 0 ? ['', '필수 배경지식: `' + path.join(f.routine, 'workflow/context.md') + '`'] : []),
+      '이번 턴에서는 다음 단계만 수행하세요: `' + path.join(f.routine, 'workflow/steps', turn.step + '.md') + '`',
+      '',
+    ].join('\n');
+    assert.equal(calls[index].at(-1), expected);
+    assert.ok(fs.statSync(evidence).isDirectory());
+    if (index === 0) assert.equal(calls[index][0], 'exec');
+    else {
+      assert.deepEqual(calls[index].slice(0, 2), ['session', 'resume']);
+      assert.equal(calls[index][4], run.sessionId);
+    }
+  }
+});
+
+test('CLI 원문은 메모리에서만 판독하고 영구 결과와 출력에는 구조화된 상태만 남김', () => {
+  const marker = 'PRIVATE_RENDERED_TRACE_NOT_FOR_STORAGE';
+  const f = fixture([{ value: '운영중', message: marker }, ...success().slice(1)]);
+  const out = spawnSync(process.execPath, [f.engine, 'u1', f.routine], { env: f.env, encoding: 'utf8' });
+  assert.equal(out.status, 0, out.stderr);
+  const [run] = lines(out.stdout, 'ENGINE_RESULT=');
+  const record = fs.readFileSync(path.join(run.runDir, 'run.json'), 'utf8');
+  for (const text of [out.stdout, out.stderr, record]) assert.ok(!text.includes(marker));
+  assert.deepEqual(run.turns.map(t => t.response), success().map(({value}) => ({value})));
+  assert.equal(run.finishStatus, 'ok');
+});
+
+test('CLI 실패 stderr와 미승인 상태 값도 영구 실패 이유에 넣지 않음', () => {
+  const marker = 'PRIVATE_CLI_FAILURE_TRACE';
+  for (const value of [{exit:9,stderr:marker}, {value:marker}]) {
+    const f=fixture([value]);
+    const out=spawnSync(process.execPath,[f.engine,'u1',f.routine],{env:f.env,encoding:'utf8'});
+    assert.equal(out.status,1);
+    const [run]=lines(out.stdout,'ENGINE_RESULT=');
+    assert.equal(run.finishStatus,'stopped');
+    for(const text of [out.stdout,out.stderr,fs.readFileSync(path.join(run.runDir,'run.json'),'utf8')]) assert.ok(!text.includes(marker));
+  }
+});
+
+test('폴더 밖을 가리키는 흐름 심볼릭 링크는 CLI 호출 전에 거부', {skip: process.platform === 'win32' && 'symlink privileges vary on Windows'}, () => {
+  const f=fixture(success());
+  const outside=path.join(f.dir,'outside.json');
+  fs.copyFileSync(path.join(f.routine,'workflow/flow.json'),outside);
+  fs.symlinkSync(outside,path.join(f.routine,'workflow/linked.json'));
+  const out=spawnSync(process.execPath,[f.engine,'u1',f.routine,'workflow/linked.json'],{env:f.env,encoding:'utf8'});
+  assert.notEqual(out.status,0);
+  assert.deepEqual(readCalls(f.calls),[]);
+});

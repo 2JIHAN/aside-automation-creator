@@ -58,7 +58,8 @@ function fixture(t) {
   copyFileSync(engine, join(repository, 'engine.mjs'));
   put(join(scenario, 'workflow/context.md'), 'Offline native fixture.');
   put(join(scenario, 'workflow/단계.md'), 'Offline native fixture.');
-  put(join(scenario, 'workflow/flow.json'), JSON.stringify({
+  put(join(scenario, 'workflow/mode.json'), JSON.stringify({mode:'selected',flows:{selected:'workflow/flows/selected.json'}}));
+  put(join(scenario, 'workflow/flows/selected.json'), JSON.stringify({
     contextFile: 'workflow/context.md', startStep: 'work', initialState: { 현재턴결과: '미실행' },
     steps: { work: { instructionFile: 'workflow/단계.md', next: [{ when: { 현재턴결과: '정상' }, finishWithStatus: 'ok' }] } },
   }));
@@ -118,7 +119,7 @@ test('Windows native runner rejects a wrong account without executing the engine
   assert.notEqual(result.status, 0);
   assert.equal(result.error, undefined);
   assert.deepEqual(f.calls(), [['account', 'list']]);
-  assert.equal(existsSync(join(f.scenario, 'runs')), false);
+  assert.equal(existsSync(join(f.scenario, 'runs/.run.lock')), false);
 });
 
 test('Windows native runner rejects unexpected arguments before any CLI execution', options, t => {
@@ -128,6 +129,43 @@ test('Windows native runner rejects unexpected arguments before any CLI executio
     assert.notEqual(result.status, 0);
     assert.equal(result.error, undefined);
     assert.deepEqual(f.calls(), []);
-    assert.equal(existsSync(join(f.scenario, 'runs')), false);
+    assert.equal(existsSync(join(f.scenario, 'runs/.run.lock')), false);
   }
+});
+
+for (const mode of [
+  {mode:'unknown',flows:{}},
+  {mode:'toString',flows:{}},
+  {mode:'selected',flows:{selected:'../outside.json'}},
+  {mode:'selected',flows:{selected:'workflow/missing.json'}},
+]) test('Windows native runner rejects invalid selected flow before CLI execution: '+JSON.stringify(mode),options,t=>{
+  const f=fixture(t);
+  put(join(f.root,'outside.json'),readFileSync(join(f.scenario,'workflow/flows/selected.json'),'utf8'));
+  put(join(f.scenario,'workflow/mode.json'),JSON.stringify(mode));
+  const result=f.run();
+  assert.notEqual(result.status,0,result.stdout+result.stderr);
+  assert.deepEqual(f.calls(),[]);
+  assert.equal(existsSync(join(f.scenario,'runs/.run.lock')),false);
+});
+
+test('Windows native runner preserves an existing owner lock and performs no CLI execution',options,t=>{
+  const f=fixture(t);
+  const lock=join(f.scenario,'runs/.run.lock');
+  put(join(lock,'pid'),'existing-owner');
+  const result=f.run();
+  assert.notEqual(result.status,0,result.stdout+result.stderr);
+  assert.deepEqual(f.calls(),[]);
+  assert.equal(readFileSync(join(lock,'pid'),'utf8'),'existing-owner');
+});
+
+test('Windows native runner releases its lock after a failed engine status',options,t=>{
+  const f=fixture(t);
+  const file=join(f.scenario,'workflow/flows/selected.json');
+  const flow=JSON.parse(readFileSync(file,'utf8'));
+  flow.steps.work.next[0].when.현재턴결과='not-returned';
+  put(file,JSON.stringify(flow));
+  const result=f.run();
+  assert.notEqual(result.status,0,result.stdout+result.stderr);
+  assert.equal(f.calls().length,2);
+  assert.equal(existsSync(join(f.scenario,'runs/.run.lock')),false);
 });

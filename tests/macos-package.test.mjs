@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, cpSync, chmodSync, rmSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, cpSync, chmodSync, rmSync, existsSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -8,10 +8,12 @@ import { spawnSync } from 'node:child_process';
 const cleaner=process.env.ASIDE_CLEAR_QUARANTINE;
 const template=readFileSync(new URL('../assets/scenarios/browser-monitor/template/run.sh',import.meta.url),'utf8');
 function fixture(t) {
-  const root=mkdtempSync(join(tmpdir(),'aside-package-run-'));
+  const root=realpathSync(mkdtempSync(join(tmpdir(),'aside-package-run-')));
   t.after(()=>rmSync(root,{recursive:true,force:true}));
   const repo=join(root,'private repo'), dir=join(root,'routine'), cli=join(root,'private aside'), log=join(root,'calls');
-  mkdirSync(join(repo,'runtime'),{recursive:true}); mkdirSync(dir);
+  mkdirSync(join(repo,'runtime'),{recursive:true}); mkdirSync(join(dir,'workflow/flows'),{recursive:true});
+  writeFileSync(join(dir,'workflow/mode.json'), JSON.stringify({mode:'operational',flows:{operational:'workflow/flows/operational.json'}}));
+  writeFileSync(join(dir,'workflow/flows/operational.json'), '{}');
   cpSync(process.execPath,join(repo,'runtime/node'));
   writeFileSync(join(repo,'engine.mjs'), 'import fs from "node:fs"; fs.appendFileSync(process.env.CALL_LOG, JSON.stringify(process.argv.slice(2))+"\\n");');
   writeFileSync(cli,'#!/bin/sh\nprintf "account:%s\\n" "$*" >> "$CALL_LOG"\nprintf "u7 fixture@example.com\\n"\n'); chmodSync(cli,0o755);
@@ -24,7 +26,7 @@ function fixture(t) {
 }
 test('run uses explicit private Node and CLI with the unchanged account check',t=>{
   const f=fixture(t), result=f.run(); assert.equal(result.status,0,result.stderr);
-  assert.deepEqual(readFileSync(f.log,'utf8').trim().split('\n'),['account:account list',JSON.stringify(['u7',f.dir])]);
+  assert.deepEqual(readFileSync(f.log,'utf8').trim().split('\n'),['account:account list',JSON.stringify(['u7',f.dir,'workflow/flows/operational.json'])]);
 });
 test('run rejects every argument before account lookup or engine execution',t=>{
   const f=fixture(t), result=f.run(['--test']); assert.equal(result.status,2); assert.equal(existsSync(f.log),false);

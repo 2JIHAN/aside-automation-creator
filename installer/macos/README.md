@@ -31,7 +31,7 @@ SPARKLE_DISTRIBUTION_DIR=/absolute/Sparkle \
 
 페이로드 지문은 엔진과 `SKILL.md`, 유형 안내와 사례, 템플릿, 작성 규약과 Node를 포함합니다. 앱 UI와 배포용 `README.md`, 장식 이미지와 `.DS_Store`는 재설치 여부를 바꾸지 않습니다. 패키지 갱신은 내용이 같은 파일을 건너뛰고 변경된 파일만 교체합니다. 이전 파일은 업데이트 작업 중에만 임시 보관하고 성공하면 삭제합니다. 일반적인 실패는 변경 전 파일로 복원하며 복원 자체가 실패하면 복구 데이터를 보존하고 오류를 알립니다. Git 소스를 패키지로 처음 전환할 때만 기존 Git 저장소 전체를 보존합니다.
 
-구형 `assets/template/`에서는 `v0.2.2`와 `v0.4.1`의 공식 체크섬과 일치하는 파일만 설치 완료 후 정리합니다. 기준은 `references/legacy-template-sha256.tsv`에 있습니다. 사용자가 수정하거나 추가한 파일과 링크는 활성 경로에 보존하며, 링크를 따라 삭제하지 않습니다.
+구형 `assets/template/`과 기본형 및 브라우저형의 폐기된 `workflow/flow.json`, `memory.md`, `step-boundary-checklist.md`, `learnings.md`는 승인된 경로와 체크섬이 모두 일치할 때만 설치 완료 후 정리합니다. 기준은 `references/legacy-template-sha256.tsv`에 있습니다. 사용자가 수정하거나 추가한 파일과 링크는 보존하며, 링크를 따라 삭제하지 않습니다.
 
 1. ZIP과 공증된 DMG를 해당 GitHub 릴리즈에 올립니다.
 2. GitHub에서 파일을 다시 받아 SHA256과 서명을 확인합니다.

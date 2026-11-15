@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 
 const installer = fileURLToPath(new URL('../install-to-aside.sh', import.meta.url));
 const cleaner = process.env.ASIDE_CLEAR_QUARANTINE;
@@ -20,7 +21,10 @@ function put(path, text) {
 
 function clean(path) {
   if (!darwin || !existsSync(cleaner)) return;
-  const result = spawnSync('/bin/bash', [cleaner, path], { encoding: 'utf8' });
+  let result = spawnSync('/bin/bash', [cleaner, path], { encoding: 'utf8' });
+  if (result.status !== 0 && /No such xattr/.test(result.stderr)) {
+    result = spawnSync('/bin/bash', [cleaner, path], { encoding: 'utf8' });
+  }
   assert.equal(result.status, 0, result.stderr || result.stdout);
 }
 
@@ -482,14 +486,17 @@ test('source package refuses symlink ancestors of repository without outside wri
 });
 
 
-test('Darwin package clears only touched copies, preserving modes and unrelated attributes', {skip: !darwin}, t => {
+test('Darwin package clears updated copies and preserves unchanged runtime identity and custom attributes', {skip: !darwin}, t => {
   const f=fixture(t); packageSource(f); success(packageRun(f));
   const engine=join(f.source,'engine.mjs'), node=join(f.repo,'runtime/node');
+  const control=join(f.root,'quarantine-control'); put(control,'outside installation targets');
   put(engine,'// tagged replacement\n');
   for (const [file,name,value] of [
     [engine,'com.apple.quarantine','0081;00000000;Aside;'],
     [engine,'test.aside.preserve','keep'],
     [node,'com.apple.quarantine','0081;00000000;Aside;'],
+    [node,'test.aside.untouched','keep-node'],
+    [control,'com.apple.quarantine','0081;00000000;Aside;'],
   ]) assert.equal(spawnSync('/usr/bin/xattr',['-w',name,value,file]).status,0);
   chmodSync(engine,0o444); const before=identity(node);
   success(packageRun(f));
@@ -497,7 +504,11 @@ test('Darwin package clears only touched copies, preserving modes and unrelated 
   assert.equal(statSync(dest).mode & 0o777,0o444);
   assert.doesNotMatch(spawnSync('/usr/bin/xattr',[dest],{encoding:'utf8'}).stdout,/com.apple.quarantine/);
   assert.equal(spawnSync('/usr/bin/xattr',['-p','test.aside.preserve',dest],{encoding:'utf8'}).stdout.trim(),'keep');
-  assert.match(spawnSync('/usr/bin/xattr',[node],{encoding:'utf8'}).stdout,/com.apple.quarantine/);
+  assert.equal(spawnSync('/usr/bin/xattr',['-p','test.aside.untouched',node],{encoding:'utf8'}).stdout.trim(),'keep-node');
+  // Host cleanup can remove quarantine independently; the outside control detects that case.
+  if (spawnSync('/usr/bin/xattr',[control],{encoding:'utf8'}).stdout.includes('com.apple.quarantine')) {
+    assert.match(spawnSync('/usr/bin/xattr',[node],{encoding:'utf8'}).stdout,/com.apple.quarantine/);
+  }
   assert.deepEqual(identity(node),before);
 });
 
@@ -723,3 +734,38 @@ test('Git replacement keeps legacy user files in shared and profile active desti
     assert.equal(readFileSync(join(dest, 'assets/template/added.txt'), 'utf8'), 'added legacy content');
   }
 });
+
+for (const type of ['basic', 'browser-monitor']) {
+  test(type + ': retired scenario templates are removed only when known bytes match', t => {
+    const f = fixture(t); packageSource(f);
+    const folder = 'assets/scenarios/' + type + '/template/workflow';
+    const retired = ['memory.md', 'step-boundary-checklist.md', 'flow.json', 'learnings.md'];
+    const bytes = 'known retired template\n';
+    const hash = createHash('sha256').update(bytes).digest('hex');
+    put(join(f.source, 'references/legacy-template-sha256.tsv'), retired.map(name => hash + '\t' + folder + '/' + name).join('\n') + '\n' + hash + '\tREADME.md\n');
+    success(packageRun(f));
+    for (const dest of [f.repo, f.dest(0)]) {
+      for (const name of retired) put(join(dest, folder, name), bytes);
+      put(join(dest, folder, 'memory.md'), 'user changed content');
+      put(join(dest, folder, 'custom.md'), 'user addition');
+    }
+    success(packageRun(f));
+    for (const dest of [f.repo, f.dest(0)]) {
+      for (const name of retired.slice(1)) assert.equal(existsSync(join(dest, folder, name)), false, name);
+      assert.equal(readFileSync(join(dest, folder, 'memory.md'), 'utf8'), 'user changed content');
+      assert.equal(readFileSync(join(dest, folder, 'custom.md'), 'utf8'), 'user addition');
+    }
+  });
+  test(type + ': retired scenario file symlink is preserved without following it', t => {
+    const f = fixture(t); packageSource(f);
+    const relative = 'assets/scenarios/' + type + '/template/workflow/memory.md';
+    const bytes = 'known retired template\n';
+    put(join(f.source, 'references/legacy-template-sha256.tsv'), createHash('sha256').update(bytes).digest('hex') + '\t' + relative + '\n');
+    success(packageRun(f));
+    const outside = join(f.root, 'outside.md'); put(outside, bytes);
+    for (const dest of [f.repo, f.dest(0)]) { mkdirSync(resolve(join(dest, relative), '..'), {recursive:true}); symlinkSync(outside, join(dest, relative)); }
+    success(packageRun(f));
+    for (const dest of [f.repo, f.dest(0)]) assert.ok(lstatSync(join(dest, relative)).isSymbolicLink());
+    assert.equal(readFileSync(outside, 'utf8'), bytes);
+  });
+}

@@ -1,0 +1,28 @@
+{
+  "contextFile": "workflow/context.md",
+  "startStep": "dev-plan",
+  "initialState": {
+    "현재턴결과": "미실행",
+    "계획상태": "미실행"
+  },
+  "steps": {
+    "dev-plan": {
+      "instructionFile": "workflow/steps/dev-plan.md",
+      "stateKey": "계획상태",
+      "next": [
+        {
+          "when": {
+            "계획상태": "계획완료"
+          },
+          "finishWithStatus": "planned"
+        },
+        {
+          "when": {
+            "계획상태": "계획불가"
+          },
+          "finishWithStatus": "incomplete"
+        }
+      ]
+    }
+  }
+}

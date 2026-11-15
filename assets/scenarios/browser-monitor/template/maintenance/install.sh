@@ -54,7 +54,7 @@ printf '%s\n' "$CONFIG" > "$DEST"
 # 생성한 실행기와 plist만 대상으로 격리 속성을 제거하고 검증한다.
 for FILE in "$LAUNCHER" "$DEST"; do
   ATTRS=$(/usr/bin/xattr "$FILE")
-  if printf '%s\n' "$ATTRS" | grep -qx com.apple.quarantine; then /usr/bin/xattr -d com.apple.quarantine "$FILE"; fi
+  if printf '%s\n' "$ATTRS" | grep -qx com.apple.quarantine; then /usr/bin/xattr -d com.apple.quarantine "$FILE" 2>/dev/null || true; fi
   ATTRS=$(/usr/bin/xattr "$FILE")
   if printf '%s\n' "$ATTRS" | grep -qx com.apple.quarantine; then echo "격리 속성 제거 실패: $FILE" >&2; exit 1; fi
 done

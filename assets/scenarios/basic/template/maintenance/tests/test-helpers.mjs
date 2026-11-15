@@ -9,17 +9,19 @@ import { execFileSync, spawnSync } from 'node:child_process';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const engine = path.join(process.env.ASIDE_AUTOMATION_CREATOR_REPO || path.join(os.homedir(), '.local/share/aside-automation-creator'), 'engine.mjs');
-const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'aside-creator-test-'));
+const temp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'aside-creator-test-')));
 test.after(() => fs.rmSync(temp, { recursive: true, force: true }));
 const initial = { 업무상태: '미확인', 알림상태: '미확인', 현재턴결과: '미확인', 학습계기: '없음', 정리상태: '미확인', 학습상태: '미실행', 알림검토결과: '미실행' };
 function executable(file, content) {
   fs.writeFileSync(file, content, { mode: 0o755 });
   if (process.platform !== 'darwin') return;
+  const cleaner = process.env.ASIDE_CLEAR_QUARANTINE || path.join(os.homedir(), '.aside/u/0/skills/user/quarantine-free-files/scripts/clear-quarantine.sh');
+  if (fs.existsSync(cleaner)) execFileSync('/bin/bash', [cleaner, file]);
   const attrs = () => execFileSync('/usr/bin/xattr', [file], { encoding: 'utf8' });
   if (attrs().includes('com.apple.quarantine')) execFileSync('/usr/bin/xattr', ['-d', 'com.apple.quarantine', file]);
   assert.ok(!attrs().includes('com.apple.quarantine'));
 }
-function fixture(values) {
+function fixture(values, mode = 'operational') {
   const dir = fs.mkdtempSync(path.join(temp, 'case-'));
   const routine = path.join(dir, 'routine');
   fs.mkdirSync(routine);
@@ -30,6 +32,10 @@ function fixture(values) {
     const text = fs.readFileSync(file, 'utf8').replaceAll('__TIMEZONE__', 'Asia/Seoul').replaceAll('__ACCOUNT_EMAIL__', 'test@example.invalid').replaceAll('__AUTOMATION_SLUG__', 'template-test').replaceAll('__AUTOMATION_NAME__', '테스트자동화');
     fs.writeFileSync(file, text);
   }
+  const modeFile = path.join(routine, 'workflow/mode.json');
+  const modeConfig = JSON.parse(fs.readFileSync(modeFile, 'utf8'));
+  modeConfig.mode = mode;
+  fs.writeFileSync(modeFile, JSON.stringify(modeConfig));
   const home = path.join(dir, 'home');
   const engineRepo = path.join(home, '.local/share/aside-automation-creator');
   fs.mkdirSync(engineRepo, { recursive: true });
@@ -62,10 +68,11 @@ function records(file) { return fs.existsSync(file) ? fs.readFileSync(file, 'utf
 function execute(f) {
   const shared = path.join(f.env.ASIDE_AUTOMATION_CREATOR_REPO, 'engine.mjs');
   const before = fs.readFileSync(shared);
-  const out = spawnSync(process.execPath, [path.join(f.env.ASIDE_AUTOMATION_CREATOR_REPO, 'engine.mjs'), 'u7', f.routine], { env: f.env, encoding: 'utf8', timeout: 10000 });
+  const mode = JSON.parse(fs.readFileSync(path.join(f.routine, 'workflow/mode.json'), 'utf8'));
+  const out = spawnSync(process.execPath, [path.join(f.env.ASIDE_AUTOMATION_CREATOR_REPO, 'engine.mjs'), 'u7', f.routine, mode.flows[mode.mode]], { env: f.env, encoding: 'utf8', timeout: 10000 });
   assert.deepEqual(fs.readFileSync(shared), before);
   assert.equal(fs.existsSync(path.join(f.env.ASIDE_AUTOMATION_CREATOR_REPO, 'runtime')), false);
-  assert.equal(fs.existsSync(path.join(f.env.ASIDE_AUTOMATION_CREATOR_REPO, 'workflow/memory.md')), false);
+  assert.equal(fs.existsSync(path.join(f.env.ASIDE_AUTOMATION_CREATOR_REPO, 'workflow/learnings.md')), false);
   const line = out.stdout.split('\n').find(s => s.startsWith('ENGINE_RESULT='));
   assert.ok(line, out.stderr);
   return { out, run: JSON.parse(line.slice('ENGINE_RESULT='.length)) };

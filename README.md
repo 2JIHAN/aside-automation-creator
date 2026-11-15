@@ -58,7 +58,7 @@ aside-automation-creator로 ~하는 일을 자동화하려고 해.
 ```
 
 
-에이전트가 작업 지침과 실행 파일을 기본적으로 `~/aside-automations/작업명/`에 저장합니다. 예약 시간과 알림 대상, 자동으로 처리해도 되는 범위는 업무에 맞게 정해줍니다.
+에이전트가 작업 지침과 실행 파일을 기본적으로 `~/aside-automations/작업명/`에 저장합니다. 개발과 운영 흐름은 `workflow/flows/`에 나누고 `workflow/mode.json`으로 선택합니다. 기본 `operational`은 허용된 실제 업무를 수행합니다. 기존 절차를 살펴보거나 수정할 때 `dev`를 선택합니다. 개발 흐름의 기본 예제는 작업계획서만 작성합니다. 예약 시간과 알림 대상, 자동으로 처리해도 되는 범위는 업무에 맞게 정해줍니다.
 
 ## 수동 설치
 
@@ -111,7 +111,7 @@ Unblock-File -LiteralPath $installer
 자동화를 만든 폴더에서 실행합니다.
 
 ```powershell
-.\run.ps1             # 실제 업무 1회 실행
+.\run.ps1             # 선택한 흐름 1회 실행. 기본값은 operational
 .\maintenance\install.ps1 -Minute 30  # 매시 30분 예약, 즉시 실행하지 않음
 .\maintenance\uninstall.ps1       # 이 자동화의 예약만 제거
 ```

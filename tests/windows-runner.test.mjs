@@ -44,7 +44,8 @@ console.log('상태: 완료');
   chmodSync(cli, 0o755);
   put(join(scenario, 'workflow/context.md'), 'fixture only');
   put(join(scenario, 'workflow/단계.md'), 'fixture only');
-  put(join(scenario, 'workflow/flow.json'), JSON.stringify({ contextFile: 'workflow/context.md', startStep: 'work', initialState: { 현재턴결과: '미실행' }, steps: { work: { instructionFile: 'workflow/단계.md', next: [{ when: { 현재턴결과: '완료' }, finishWithStatus: 'success' }] } } }));
+  put(join(scenario, 'workflow/mode.json'), JSON.stringify({mode:'selected',flows:{selected:'workflow/flows/selected.json'}}));
+  put(join(scenario, 'workflow/flows/selected.json'), JSON.stringify({ contextFile: 'workflow/context.md', startStep: 'work', initialState: { 현재턴결과: '미실행' }, steps: { work: { instructionFile: 'workflow/단계.md', next: [{ when: { 현재턴결과: '완료' }, finishWithStatus: 'success' }] } } }));
   const run = (extra = {}, args = []) => {
     clean(root);
     return spawnSync(pwsh, ['-NoProfile', '-NonInteractive', '-File', runner, ...args], { encoding: 'utf8', timeout: 20000, cwd: root,
@@ -62,7 +63,7 @@ test('PowerShell parses the shipped Windows runner', options, () => {
 test('Windows runner passes the matching account, own folder, custom shared repository, timezone and CLI path to real Node engine', nativeOptions, t => {
   const f = fixture(t);
   success(f.run());
-  assert.deepEqual(JSON.parse(readFileSync(f.nodeLog, 'utf8')), { argv: ['u7', f.scenario], cwd: f.scenario, tz: 'Asia/Seoul', cli: f.cli });
+  assert.deepEqual(JSON.parse(readFileSync(f.nodeLog, 'utf8')), { argv: ['u7', f.scenario, 'workflow/flows/selected.json'], cwd: f.scenario, tz: 'Asia/Seoul', cli: f.cli });
   const calls = f.calls();
   assert.deepEqual(calls[0], ['account', 'list']);
   assert.equal(calls.length, 2);
@@ -92,7 +93,7 @@ for (const [name, extra] of [
     assert.notEqual(result.status, 0, result.stdout + result.stderr);
     assert.equal(existsSync(f.nodeLog), false);
     assert.deepEqual(f.calls(), [['account', 'list']]);
-    assert.equal(existsSync(join(f.scenario, 'runs')), false);
+    assert.equal(existsSync(join(f.scenario, 'runs/.run.lock')), false);
   });
 }
 
@@ -149,6 +150,6 @@ test('Windows runner uses bundled runtime/node.exe when Node is absent from PATH
   const emptyPath = join(f.root, 'empty PATH');
   mkdirSync(emptyPath);
   success(f.run({ ASIDE_NODE_PATH: '', PATH: emptyPath }));
-  assert.deepEqual(JSON.parse(readFileSync(f.nodeLog, 'utf8')).argv, ['u7', f.scenario]);
+  assert.deepEqual(JSON.parse(readFileSync(f.nodeLog, 'utf8')).argv, ['u7', f.scenario, 'workflow/flows/selected.json']);
   assert.equal(f.calls().length, 2);
 });

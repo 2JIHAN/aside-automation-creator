@@ -326,3 +326,24 @@ for (const baseline of ['released', 'released CRLF bytes', 'missing', 'unknown']
     }
   });
 }
+
+for (const type of ['basic', 'browser-monitor']) test('Windows retired scenario files: ' + type, options, t => {
+  const f = fixture(t);
+  const folder = 'assets/scenarios/' + type + '/template/workflow';
+  const bytes = 'known retired template\n';
+  const names = ['memory.md', 'step-boundary-checklist.md', 'flow.json', 'learnings.md'];
+  const hash = createHash('sha256').update(bytes).digest('hex');
+  put(join(f.source, 'references/legacy-template-sha256.tsv'), names.map(name => hash + '\t' + folder + '/' + name).join('\n') + '\n');
+  put(join(f.source, 'runtime/node.exe'), 'bundled fixture');
+  const run = () => f.run({MOCK_GIT_FORBIDDEN:'1'}, true, ['-SourceDirectory', f.source]);
+  success(run());
+  for (const dest of [f.repo, f.dest(0)]) {
+    for (const name of names) put(join(dest, folder, name), bytes);
+    put(join(dest, folder, 'memory.md'), 'user modified');
+  }
+  success(run());
+  for (const dest of [f.repo, f.dest(0)]) {
+    for (const name of names.slice(1)) assert.equal(existsSync(join(dest, folder, name)), false, name);
+    assert.equal(readFileSync(join(dest, folder, 'memory.md'), 'utf8'), 'user modified');
+  }
+});

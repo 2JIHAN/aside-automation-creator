@@ -9,11 +9,13 @@ const root=fileURLToPath(new URL('../../',import.meta.url));
 const engineSource=fs.readFileSync(path.join(root,'engine.mjs'),'utf8');
 const defaultFlow=JSON.parse(fs.readFileSync(new URL('./fixtures/flow.json',import.meta.url),'utf8'));
 const initialState=defaultFlow.initialState;
-const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'creator-engine-'));
+const tmp=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'creator-engine-')));
 test.after(()=>fs.rmSync(tmp,{recursive:true,force:true}));
 function executable(file, content) {
   fs.writeFileSync(file, content, { mode: 0o700 });
   if (process.platform !== 'darwin') return;
+  const cleaner = process.env.ASIDE_CLEAR_QUARANTINE || path.join(os.homedir(), '.aside/u/0/skills/user/quarantine-free-files/scripts/clear-quarantine.sh');
+  if (fs.existsSync(cleaner)) execFileSync('/bin/bash', [cleaner, file]);
   const attrs = () => execFileSync('/usr/bin/xattr', [file], { encoding: 'utf8' });
   if (attrs().includes('com.apple.quarantine')) execFileSync('/usr/bin/xattr', ['-d', 'com.apple.quarantine', file]);
   assert.ok(!attrs().includes('com.apple.quarantine'));
@@ -42,9 +44,11 @@ const i = fs.readFileSync(process.env.CALLS, 'utf8').trim().split('\\n').map(JSO
 if (a[0] === 'exec') console.error('created new session: engine_mock');
 if (!Object.hasOwn(plan.turns, i)) { console.error('Unplanned CLI turn ' + i); process.exit(8); }
 const value = plan.turns[i];
-const evidencePath = a.at(-1).split(String.fromCharCode(96))[1].trim();
+const evidenceLine = a.at(-1).split('\\n').find(line => line.startsWith('이번 턴 증거 폴더: '));
+const evidencePath = evidenceLine.split(String.fromCharCode(96))[1];
 for (const [name, bytes] of Object.entries(value?.evidence ?? {})) fs.writeFileSync(require('path').join(evidencePath, name), Buffer.from(bytes, 'base64'));
 
+if (value?.stderr) console.error(value.stderr);
 if (value?.exit) process.exit(value.exit);
 console.log(typeof value === 'string' ? value : [value.message, '상태: ' + value.value].filter(Boolean).join('\\n'));
 `);

@@ -59,7 +59,7 @@ jobs:
           node --check engine.mjs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $tests = @(Get-ChildItem tests/windows-*.test.mjs | ForEach-Object FullName)
-          node --test @tests
+          node --test @tests tests/scenario-launchers.test.mjs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
   build:
     needs: node-version
@@ -134,7 +134,7 @@ jobs:
         with:
           node-version: '26'
       - name: Test macOS package installation without real profiles
-        run: ASIDE_AUTOMATION_CREATOR_REPO="$PWD" node --test assets/scenarios/*/template/maintenance/tests/*.test.mjs tests/engine/*.test.mjs tests/authoring-documents.test.mjs tests/release-content.test.mjs tests/install-to-aside.test.mjs tests/macos-*.test.mjs
+        run: ASIDE_AUTOMATION_CREATOR_REPO="$PWD" node --test assets/scenarios/*/template/maintenance/tests/*.test.mjs tests/engine/*.test.mjs tests/authoring-documents.test.mjs tests/scenario-launchers.test.mjs tests/release-content.test.mjs tests/install-to-aside.test.mjs tests/macos-*.test.mjs
       - name: Build universal macOS installer for review
         env:
           RELEASE_REF: ${{ github.ref_name }}
