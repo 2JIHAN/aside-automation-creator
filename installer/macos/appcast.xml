@@ -3,6 +3,18 @@
     <channel>
         <title>Aside Automation Creator</title>
         <item>
+            <title>0.7.0</title>
+            <pubDate>Mon, 16 Nov 2026 02:39:09 +0900</pubDate>
+            <link>https://github.com/2JIHAN/aside-automation-creator</link>
+            <sparkle:version>0.7.0</sparkle:version>
+            <sparkle:shortVersionString>0.7.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.5</sparkle:minimumSystemVersion>
+            <enclosure url="https://github.com/2JIHAN/aside-automation-creator/releases/download/v0.7.0/AsideAutomationCreator-0.7.0-macOS.zip" length="192996653" type="application/octet-stream" sparkle:edSignature="hBHPtG+rWU3+UBqVBfpDvdISC0v927YTnZ0d1G2McajAH9LJlTujmCVFWxRMCpKs+47uUu/p1ZpXg6XW+iw/AA=="/>
+            <sparkle:deltas>
+                <enclosure url="https://github.com/2JIHAN/aside-automation-creator/releases/download/v0.7.0/AsideAutomationCreator0.7.0-0.6.0.delta" sparkle:deltaFrom="0.6.0" length="82534470" type="application/octet-stream" sparkle:deltaFromSparkleExecutableSize="976432" sparkle:deltaFromSparkleLocales="de,he,ar,el,ja,fa,uk" sparkle:edSignature="cMOzf0mq7bagNx1mjwr7t9BE6ITRWz82aufsrxbpL23K5DGEbegfA2HihH7XFNVNCpRopn42zK3htqqJo2PaBQ=="/>
+            </sparkle:deltas>
+        </item>
+        <item>
             <title>0.6.0</title>
             <pubDate>Tue, 10 Nov 2026 18:28:06 +0900</pubDate>
             <link>https://github.com/2JIHAN/aside-automation-creator</link>
@@ -22,18 +34,6 @@
             <sparkle:shortVersionString>0.5.1</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>13.5</sparkle:minimumSystemVersion>
             <enclosure url="https://github.com/2JIHAN/aside-automation-creator/releases/download/v0.5.1/AsideAutomationCreator-0.5.1-macOS.zip" length="192983127" type="application/octet-stream" sparkle:edSignature="1jT8VKIDq1eS5m/dS99pqFMuEVcSZW+X18s0EROs/RplKihtszHYOrHGcpnvL/PxEHdi+dR8Vw2s06OShr3gAw=="/>
-        </item>
-        <item>
-            <title>0.4.1</title>
-            <pubDate>Thu, 05 Nov 2026 18:58:32 +0900</pubDate>
-            <link>https://github.com/2JIHAN/aside-automation-creator</link>
-            <sparkle:version>0.4.1</sparkle:version>
-            <sparkle:shortVersionString>0.4.1</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>13.5</sparkle:minimumSystemVersion>
-            <enclosure url="https://github.com/2JIHAN/aside-automation-creator/releases/download/v0.4.1/AsideAutomationCreator-0.4.1-macOS.zip" length="192906556" type="application/octet-stream" sparkle:edSignature="cMV10JAExNlenbkrk5ei3idiU5dksvtcsEGmJiYDNHYKoP0LFg/2S3W/5GOSk7sSFqyfa57rd+0DvD1fpB1fCg=="/>
-            <sparkle:deltas>
-                <enclosure url="https://github.com/2JIHAN/aside-automation-creator/releases/download/v0.4.1/AsideAutomationCreator0.4.1-0.4.0.delta" sparkle:deltaFrom="0.4.0" length="58086" type="application/octet-stream" sparkle:deltaFromSparkleExecutableSize="976432" sparkle:deltaFromSparkleLocales="de,he,ar,el,ja,fa,uk" sparkle:edSignature="ehvTADkJB4jQVQoRse6LUjymnetQcoqNcxS/3EvvIUAakHd3eRLUB9ELR6LhmdRkq6bVmgDQ5zAf8cg+e1O1BQ=="/>
-            </sparkle:deltas>
         </item>
     </channel>
 </rss>
