@@ -32,7 +32,7 @@ test('real macOS payload staging excludes Finder metadata and preserves source f
   const repo = path.join(base, 'repo');
   function put(name, text) { const file = path.join(repo, name); fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, text); }
   fs.mkdirSync(path.join(repo, 'installer/macos'), { recursive: true });
-  for (const name of ['SKILL.md', 'engine.mjs', 'README.md', 'install-to-aside.sh', 'installer/macos/bootstrap.sh', 'installer/macos/adopt-app.sh']) put(name, 'fixture ' + name);
+  for (const name of ['SKILL.md', 'engine.mjs', 'clear-quarantine.sh', 'README.md', 'install-to-aside.sh', 'installer/macos/bootstrap.sh', 'installer/macos/adopt-app.sh']) put(name, 'fixture ' + name);
   for (const name of ['assets/scenarios/index.md', 'assets/scenarios/basic/template/workflow/flow.json', 'assets/scenarios/browser-monitor/guide.md', 'references/file-writing-rules.md']) put(name, 'keep ' + name);
   const metadata = ['assets/scenarios/.DS_Store', 'assets/scenarios/basic/template/.DS_Store', 'references/.DS_Store'];
   for (const name of metadata) put(name, 'source metadata unchanged');

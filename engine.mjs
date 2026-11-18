@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import { stripVTControlCharacters } from "node:util";
 
@@ -33,7 +34,11 @@ function main() {
     turns: [],
   };
   const folderName = run.startedAt.replace(/[:.]/g, "-") + "-" + process.pid;
-  run.runDir = path.join(root, "runs", folderName);
+  const runsRoot = path.join(root, "runs");
+  if (fs.existsSync(runsRoot) && fs.lstatSync(runsRoot).isSymbolicLink()) {
+    throw Error("실행 기록 폴더의 심볼릭 링크를 따라가지 않습니다.");
+  }
+  run.runDir = path.join(runsRoot, folderName);
   fs.mkdirSync(run.runDir, { recursive: true });
 
   let stepId = flow.startStep;
@@ -161,6 +166,15 @@ function main() {
   run.finishedAt = new Date().toISOString();
   const runFile = path.join(run.runDir, "run.json");
   fs.writeFileSync(runFile, JSON.stringify(run, null, 2) + "\n");
+  if (process.platform === "darwin") {
+    const cleanup = spawnSync("/bin/bash", [fileURLToPath(new URL("./clear-quarantine.sh", import.meta.url)), run.runDir], { encoding: "utf8", timeout: 30000 });
+    if (cleanup.error || cleanup.status !== 0) {
+      run.finishStatus = "stopped";
+      const detail = "실행 결과 격리 속성 정리 실패: " + (cleanup.error?.code || cleanup.stderr.trim() || `exit ${cleanup.status}`);
+      run.stop = run.stop ? { ...run.stop, detail: run.stop.detail + "\n" + detail } : { step: "cleanup", detail };
+      fs.writeFileSync(runFile, JSON.stringify(run, null, 2) + "\n");
+    }
+  }
   console.log("ENGINE_RESULT=" + JSON.stringify(run));
   if (run.stop) {
     process.exitCode = 1;

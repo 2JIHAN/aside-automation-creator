@@ -21,7 +21,7 @@ trap 'rm -rf "$WORK"' EXIT
 APP="$WORK/image/Aside Automation Creator.app"
 RES="$APP/Contents/Resources"
 mkdir -p "$APP/Contents/MacOS" "$RES/payload" "$RES/cli" "$RES/runtime" "$WORK/icon.iconset"
-for item in SKILL.md engine.mjs README.md install-to-aside.sh; do /bin/cp "$ROOT/$item" "$RES/payload/"; done
+for item in SKILL.md engine.mjs clear-quarantine.sh README.md install-to-aside.sh; do /bin/cp "$ROOT/$item" "$RES/payload/"; done
 mkdir -p "$RES/payload/assets"
 /bin/cp -R "$ROOT/assets/scenarios" "$RES/payload/assets/"
 if [ -d "$ROOT/references" ]; then /bin/cp -R "$ROOT/references" "$RES/payload/"; fi

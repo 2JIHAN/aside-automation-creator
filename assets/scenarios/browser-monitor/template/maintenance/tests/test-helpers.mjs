@@ -40,6 +40,7 @@ function fixture(values, mode = 'operational') {
   const engineRepo = path.join(home, '.local/share/aside-automation-creator');
   fs.mkdirSync(engineRepo, { recursive: true });
   fs.copyFileSync(engine, path.join(engineRepo, 'engine.mjs'));
+  fs.copyFileSync(path.join(path.dirname(engine), 'clear-quarantine.sh'), path.join(engineRepo, 'clear-quarantine.sh'));
   const bin = path.join(home, '.local/bin');
   fs.mkdirSync(bin, { recursive: true });
   const calls = path.join(dir, 'calls.jsonl');

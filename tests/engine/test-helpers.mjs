@@ -32,6 +32,7 @@ function fixture(turns) {
   for(const step of Object.values(defaultFlow.steps)) fs.writeFileSync(path.join(routine,step.instructionFile),'Test instruction');
   const engine=path.join(dir,'engine.mjs');
   executable(engine,engineSource);
+  executable(path.join(dir,"clear-quarantine.sh"),fs.readFileSync(path.join(root,"clear-quarantine.sh"),"utf8"));
   const calls=path.join(dir,'calls.jsonl');
   fs.writeFileSync(path.join(dir,'plan.json'),JSON.stringify({turns}));
   executable(path.join(home,'.local/bin/aside'),`#!${process.execPath}
@@ -70,4 +71,4 @@ function engineCase(values, change = () => {}) {
   return { f, out, run };
 }
 
-export { root, engineSource, fixture, lines, readCalls, initialState, success, engineCase };
+export { root, engineSource, executable, fixture, lines, readCalls, initialState, success, engineCase };

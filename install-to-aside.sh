@@ -49,6 +49,9 @@ check_source() {
   local source="$1"
   [ -f "$source/SKILL.md" ] && [ ! -L "$source/SKILL.md" ] && [ -d "$source/assets" ] || fail '스킬 파일과 assets가 없습니다.'
   [ -f "$source/engine.mjs" ] && [ ! -L "$source/engine.mjs" ] || fail '공통 엔진이 없습니다.'
+  if grep -Fq './clear-quarantine.sh' "$source/engine.mjs"; then
+    [ -f "$source/clear-quarantine.sh" ] && [ ! -L "$source/clear-quarantine.sh" ] || fail '정리 모듈이 없습니다.'
+  fi
   [ -z "$(find "$source/assets" -path "$source/assets/template" -prune -o -type l -print -quit)" ] || fail '템플릿의 심볼릭 링크는 설치하지 않습니다.'
   [ ! -L "$source/references" ] || fail 'references의 심볼릭 링크는 설치하지 않습니다.'
   if [ -e "$source/references" ]; then
@@ -315,6 +318,7 @@ main() {
     for file in SKILL.md engine.mjs README.md install-to-aside.sh; do
       package_file "$source_directory/$file" "$target/$file"
     done
+    if [ -f "$source_directory/clear-quarantine.sh" ]; then package_file "$source_directory/clear-quarantine.sh" "$target/clear-quarantine.sh"; fi
     if [ -d "$source_directory/references" ]; then package_tree "$source_directory/references" "$target/references"; fi
     for file in assets runtime; do
       package_tree "$source_directory/$file" "$target/$file"

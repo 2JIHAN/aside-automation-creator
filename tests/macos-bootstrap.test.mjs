@@ -13,7 +13,7 @@ function fixture() {
   mkdirSync(join(home, '.local/bin'), { recursive: true });
   writeFileSync(join(home, '.local/bin/aside'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
   mkdirSync(join(resources, 'payload'), { recursive: true });
-  for (const name of ['SKILL.md', 'engine.mjs', 'README.md', 'install-to-aside.sh', 'assets', 'references']) cpSync(join(root, name), join(resources, 'payload', name), { recursive: true });
+  for (const name of ['SKILL.md', 'engine.mjs', 'clear-quarantine.sh', 'README.md', 'install-to-aside.sh', 'assets', 'references']) cpSync(join(root, name), join(resources, 'payload', name), { recursive: true });
   for (const arch of ['arm64', 'x64']) {
     mkdirSync(join(resources, 'runtime', arch), { recursive: true });
     writeFileSync(join(resources, 'runtime', arch, 'node'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
@@ -37,6 +37,7 @@ test('macOS bootstrap installs only into fixture and confirms byte-identical ski
       assert.equal(readFileSync(join(f.home, '.aside/u/0/skills/user/aside-automation-creator', name), 'utf8'), readFileSync(join(root, name), 'utf8'));
     }
     assert.equal(readFileSync(join(f.home, 'repository/runtime/node'), 'utf8'), '#!/bin/sh\nexit 0\n');
+    assert.equal(readFileSync(join(f.home,'repository/clear-quarantine.sh'),'utf8'),readFileSync(join(root,'clear-quarantine.sh'),'utf8'));
   } finally { rmSync(f.base, { recursive: true, force: true }); }
 });
 test('macOS bootstrap rejects fixture environment escape before writes', { skip: process.platform !== 'darwin' }, () => {

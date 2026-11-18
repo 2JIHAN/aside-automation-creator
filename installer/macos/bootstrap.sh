@@ -68,6 +68,9 @@ printf '스킬과 공용 엔진을 설치하고 있습니다.\n'
 /bin/bash "$WORK/payload/install-to-aside.sh" --source-directory "$WORK/payload"
 [ -f "$ASIDE_AUTOMATION_CREATOR_REPO/.aside-automation-creator-package" ] || fail '설치 확인 파일이 없습니다.'
 cmp "$WORK/payload/engine.mjs" "$ASIDE_AUTOMATION_CREATOR_REPO/engine.mjs" || fail '공용 엔진 설치 확인에 실패했습니다.'
+if [ -f "$WORK/payload/clear-quarantine.sh" ]; then
+  cmp "$WORK/payload/clear-quarantine.sh" "$ASIDE_AUTOMATION_CREATOR_REPO/clear-quarantine.sh" || fail '정리 모듈 설치 확인에 실패했습니다.'
+fi
 for profile in "$ASIDE_HOME"/u/*; do
   case "${profile##*/}" in ''|*[!0-9]*) continue ;; esac
   cmp "$WORK/payload/SKILL.md" "$profile/skills/user/aside-automation-creator/SKILL.md" || fail '스킬 설치 확인에 실패했습니다.'

@@ -41,6 +41,7 @@ function fixture(t) {
   for (const n of [0, 1, 2]) mkdirSync(join(aside, 'u', String(n)), { recursive: true });
   put(join(source, 'SKILL.md'), payload);
   put(join(source, 'engine.mjs'), '// shared engine fixture\n');
+  put(join(source, 'clear-quarantine.sh'), '#!/bin/bash\nexit 0\n');
   put(join(source, 'assets', 'scenarios', 'browser-monitor', 'template', 'marker.txt'), 'template marker\n');
   put(join(source, 'README.md'), 'must not be installed\n');
   put(join(source, 'install-to-aside.sh'), 'must not be installed\n');
@@ -321,12 +322,12 @@ test('package identical rerun copies zero files, preserves inodes/mtimes and use
   const f = fixture(t); packageSource(f);
   put(join(f.dest(1), 'local.txt'), 'keep profile');
   success(packageRun(f));
-  assert.deepEqual(readdirSync(f.repo).sort(), ['.aside-automation-creator-package', 'README.md', 'SKILL.md', 'assets', 'engine.mjs', 'install-to-aside.sh', 'runtime']);
+  assert.deepEqual(readdirSync(f.repo).sort(), ['.aside-automation-creator-package', 'README.md', 'SKILL.md', 'assets', 'clear-quarantine.sh', 'engine.mjs', 'install-to-aside.sh', 'runtime']);
   put(join(f.repo, 'local.txt'), 'keep repo');
   const paths = [f.repo, ...files(f.repo).map(p => join(f.repo, p)), ...[0,1,2].flatMap(n => [f.dest(n), ...files(f.dest(n)).map(p => join(f.dest(n), p))])];
   const before = paths.map(identity); const log = copySpy(f);
   const second = packageRun(f); success(second);
-  assert.match(second.stdout, /공용 파일: 업데이트 0개, 건너뜀 7개/);
+  assert.match(second.stdout, /공용 파일: 업데이트 0개, 건너뜀 8개/);
   assert.match(second.stdout, /프로필 파일: 업데이트 0개, 건너뜀 6개/);
   assert.match(second.stdout, /이미 최신 3개/);
   assert.equal(existsSync(log), false);
@@ -769,3 +770,14 @@ for (const type of ['basic', 'browser-monitor']) {
     assert.equal(readFileSync(outside, 'utf8'), bytes);
   });
 }
+
+test('package ships adjacent cleanup module without copying it into profiles', t=>{
+  const f=fixture(t);packageSource(f);
+  put(join(f.source,'engine.mjs'),'// ./clear-quarantine.sh required\n');
+  put(join(f.source,'clear-quarantine.sh'),'#!/bin/bash\nexit 0\n');
+  success(packageRun(f));
+  assert.equal(readFileSync(join(f.repo,'clear-quarantine.sh'),'utf8'),'#!/bin/bash\nexit 0\n');
+  assert.equal(existsSync(join(f.dest(0),'clear-quarantine.sh')),false);
+  rmSync(join(f.source,'clear-quarantine.sh'));
+  assert.notEqual(packageRun(f).status,0,'new engine without its module must be rejected');
+});

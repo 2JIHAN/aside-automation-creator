@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { fixture, lines, readCalls, initialState, success, engineCase } from './test-helpers.mjs';
+import { executable, fixture, lines, readCalls, initialState, success, engineCase } from './test-helpers.mjs';
 import { engineSource } from './test-helpers.mjs';
 
 for (const value of ['STEP_RESULT={broken', '설명만', '정상', { value: 'unexpected' }, { exit: 9 }]) {
@@ -191,4 +191,53 @@ test('폴더 밖을 가리키는 흐름 심볼릭 링크는 CLI 호출 전에 �
   const out=spawnSync(process.execPath,[f.engine,'u1',f.routine,'workflow/linked.json'],{env:f.env,encoding:'utf8'});
   assert.notEqual(out.status,0);
   assert.deepEqual(readCalls(f.calls),[]);
+});
+
+test('macOS 정리 모듈은 입력과 경계를 검사하고 속성 하나만 제거함', {skip:process.platform!=='darwin'},()=>{
+  const f=fixture(success()), helper=path.join(f.dir,'clear-quarantine.sh');
+  const inside=path.join(f.dir,'owned'), outside=path.join(f.dir,'outside');
+  fs.mkdirSync(inside);fs.mkdirSync(outside);
+  const target=path.join(inside,'target'), control=path.join(outside,'control');
+  fs.writeFileSync(target,'unchanged');fs.writeFileSync(control,'outside');
+  const xattr=(args)=>{const r=spawnSync('/usr/bin/xattr',args,{encoding:'utf8'});assert.equal(r.status,0,r.stderr);return r.stdout;};
+  const invoke=(args,extra={})=>spawnSync('/bin/bash',[helper,...args],{encoding:'utf8',env:{...f.env,...extra}});
+  assert.notEqual(invoke([]).status,0);assert.notEqual(invoke([path.join(f.dir,'missing')]).status,0);
+  fs.symlinkSync(outside,path.join(inside,'link'));
+  assert.notEqual(invoke([path.join(inside,'link','.')]).status,0);
+  xattr(['-w','com.apple.quarantine','0081;00000000;AAC-test;',target]);
+  xattr(['-w','test.aac.preserve','keep',target]);
+  assert.equal(invoke([inside]).status,0);
+  assert.ok(!xattr([target]).includes('com.apple.quarantine'));
+  assert.equal(xattr(['-p','test.aac.preserve',target]).trim(),'keep');
+  assert.equal(fs.readFileSync(target,'utf8'),'unchanged');assert.equal(fs.readFileSync(control,'utf8'),'outside');
+  fs.linkSync(control,path.join(inside,'shared'));
+  assert.notEqual(invoke([inside]).status,0);
+  fs.unlinkSync(path.join(inside,'shared'));
+  const bin=path.join(f.dir,'bin');fs.mkdirSync(bin);
+  executable(path.join(bin,'find'),'#!/bin/sh\nexit 19\n');
+  assert.notEqual(invoke([inside],{PATH:bin+':/usr/bin:/bin'}).status,0,'find failures must not become success');
+});
+test('정리 실패는 업무 상태를 보존하고 stopped로 반환함',{skip:process.platform!=='darwin'},()=>{
+  const f=fixture(success());
+  executable(path.join(f.dir,'clear-quarantine.sh'),'#!/bin/sh\nexit 17\n');
+  const out=spawnSync(process.execPath,[f.engine,'u1',f.routine],{env:f.env,encoding:'utf8'});
+  const [run]=lines(out.stdout,'ENGINE_RESULT=');
+  assert.equal(out.status,1);assert.equal(run.finishStatus,'stopped');
+  assert.equal(run.state.첫작업상태,'운영중');assert.equal(run.state.정리상태,'정리완료');
+  assert.match(run.stop.detail,/격리 속성 정리 실패/);assert.equal(run.stop.step,'cleanup');
+});
+test('엔진은 runs 심볼릭 링크를 CLI 호출 전에 거부함',{skip:process.platform==='win32'},()=>{
+  const f=fixture(success());const outside=path.join(f.dir,'outside');fs.mkdirSync(outside);fs.symlinkSync(outside,path.join(f.routine,'runs'));
+  const out=spawnSync(process.execPath,[f.engine,'u1',f.routine],{env:f.env,encoding:'utf8'});
+  assert.notEqual(out.status,0);assert.deepEqual(readCalls(f.calls),[]);assert.deepEqual(fs.readdirSync(outside),[]);
+});
+
+test('후처리도 실패하면 최초 CLI 오류와 실패 단계를 보존함',{skip:process.platform!=='darwin'},()=>{
+  const f=fixture([{exit:9}]);
+  executable(path.join(f.dir,'clear-quarantine.sh'),'#!/bin/sh\nexit 17\n');
+  const out=spawnSync(process.execPath,[f.engine,'u1',f.routine],{env:f.env,encoding:'utf8'});
+  const [run]=lines(out.stdout,'ENGINE_RESULT=');
+  assert.equal(out.status,1);assert.equal(run.stop.step,'task-a');
+  assert.match(run.stop.detail,/Aside 실행 실패/);assert.match(run.stop.detail,/격리 속성 정리 실패: exit 17/);
+  assert.deepEqual(run.state,initialState);
 });

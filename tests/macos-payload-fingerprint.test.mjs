@@ -13,7 +13,7 @@ test('payload identity ignores app, documentation and artwork but tracks install
     fs.mkdirSync(path.dirname(path.join(root, file)), { recursive: true });
     fs.writeFileSync(path.join(root, file), text);
   }
-  const included = ['payload/engine.mjs', 'payload/SKILL.md', 'payload/assets/scenarios/browser-monitor/template/workflow/flow.json', 'payload/assets/scenarios/index.md', 'payload/assets/scenarios/basic/template/workflow/flow.json', 'payload/assets/scenarios/future-type/guide.md', 'payload/assets/scenarios/future-type/template/new.txt', 'payload/assets/scenarios/future-type/examples/new.md', 'runtime/arm64/node', 'runtime/x64/node'];
+  const included = ['payload/engine.mjs', 'payload/SKILL.md', 'payload/clear-quarantine.sh', 'payload/assets/scenarios/browser-monitor/template/workflow/flow.json', 'payload/assets/scenarios/index.md', 'payload/assets/scenarios/basic/template/workflow/flow.json', 'payload/assets/scenarios/future-type/guide.md', 'payload/assets/scenarios/future-type/template/new.txt', 'payload/assets/scenarios/future-type/examples/new.md', 'runtime/arm64/node', 'runtime/x64/node'];
   for (const file of included) put(file, 'original ' + file);
   function fingerprint() {
     const run = spawnSync('/bin/bash', [script, root], { encoding: 'utf8' });

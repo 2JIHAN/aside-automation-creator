@@ -12,6 +12,7 @@ if grep -Fq 'references/file-writing-rules.md' payload/SKILL.md; then
 fi
 {
   printf '%s\n' payload/engine.mjs payload/SKILL.md
+  if [ -f payload/clear-quarantine.sh ]; then printf '%s\n' payload/clear-quarantine.sh; fi
   find payload/assets/scenarios runtime -type f ! -name .DS_Store
   if [ -d payload/references ]; then find payload/references -type f ! -name .DS_Store; fi
 } | LC_ALL=C sort | while IFS= read -r file; do
