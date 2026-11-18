@@ -349,7 +349,7 @@ test('package engine-only update leaves no backup and leaves profiles and runtim
   assert.deepEqual(identity(join(f.repo,'runtime/node')),node);
   assert.deepEqual([0,1,2].map(n => identity(join(f.dest(n),'SKILL.md'))),profiles);
   assert.equal(existsSync(join(f.aside,'skill-backups')),false);
-  assert.match(result.stdout,/공용 파일: 업데이트 1개, 건너뜀 6개/);
+  assert.match(result.stdout,/공용 파일: 업데이트 1개, 건너뜀 7개/);
   assert.match(result.stdout,/프로필 파일: 업데이트 0개, 건너뜀 6개/);
   noPackageDebris(f);
 });
